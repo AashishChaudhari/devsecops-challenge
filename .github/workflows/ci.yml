@@ -23,8 +23,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run app health check
+      - name: Run tests
         run: |
-          python3 app.py &
-          sleep 3
-          curl http://localhost:5000/health
+          pytest test_app.py -v
