@@ -26,3 +26,7 @@ jobs:
       - name: Run tests
         run: |
           pytest test_app.py -v
+
+      - name: Build Docker image
+        run: |
+          docker build -t devsecops-app:latest .
