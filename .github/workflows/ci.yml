@@ -34,6 +34,12 @@ jobs:
         run: |
           pytest test_app.py -v
 
+      - name: SonarQube code scan
+        uses: SonarSource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
       - name: Build Docker image
         run: |
           docker build -t devsecops-app:latest .
