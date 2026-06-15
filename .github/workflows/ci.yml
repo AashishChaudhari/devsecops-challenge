@@ -50,3 +50,16 @@ jobs:
           image-ref: devsecops-app:latest
           severity: HIGH,CRITICAL
           exit-code: '0'
+
+      - name: Start app for ZAP scan
+        run: |
+          pip install -r requirements.txt
+          python3 app.py &
+          sleep 5
+          curl http://localhost:5000/health
+
+      - name: Run OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://localhost:5000'
+          fail_action: false
