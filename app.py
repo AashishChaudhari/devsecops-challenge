@@ -1,6 +1,21 @@
-from flask import Flask
+from flask import Flask, Response
 
 app = Flask(__name__)
+
+def add_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Content-Security-Policy'] = "default-src 'self'"
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=()'
+    response.headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
+    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Server'] = ''
+    return response
+
+@app.after_request
+def apply_security_headers(response):
+    return add_security_headers(response)
 
 @app.route("/")
 def home():
