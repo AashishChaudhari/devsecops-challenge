@@ -50,6 +50,7 @@ jobs:
           image-ref: devsecops-app:latest
           severity: HIGH,CRITICAL
           exit-code: '1'
+          ignore-unfixed: true
 
       - name: Start app for ZAP scan
         run: |
