@@ -22,4 +22,6 @@ def test_security_headers(client):
     assert response.headers.get("X-Content-Type-Options") == "nosniff"
     assert response.headers.get("X-Frame-Options") == "DENY"
     assert "default-src" in response.headers.get("Content-Security-Policy", "")
+    assert "form-action" in response.headers.get("Content-Security-Policy", "")
     assert response.headers.get("Cache-Control") == "no-store"
+    assert response.headers.get("Cross-Origin-Resource-Policy") == "same-origin"
