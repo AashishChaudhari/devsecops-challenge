@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
@@ -59,8 +62,11 @@ jobs:
           curl http://localhost:5000/health
 
       - name: Run OWASP ZAP baseline scan
-        uses: zaproxy/action-baseline@v0.12.0
-        with:
-          target: 'http://localhost:5000'
-          fail_action: false
-          allow_issue_writing: false
+        run: |
+          docker run --network host \
+            -v $(pwd):/zap/wrk \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t http://localhost:5000 \
+            -I \
+            --autooff
