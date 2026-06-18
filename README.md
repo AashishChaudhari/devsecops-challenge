@@ -147,3 +147,4 @@ Please ensure to abide by our [Code of Conduct][code-of-conduct] during all inte
 [discussions]: https://github.com/aquasecurity/trivy/discussions
 # test
 # test
+Branch protection is working!
