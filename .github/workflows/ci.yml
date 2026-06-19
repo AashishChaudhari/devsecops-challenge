@@ -37,6 +37,11 @@ jobs:
         run: |
           pytest test_app.py -v
 
+      - name: Run pip-audit dependency scan
+        run: |
+          pip install pip-audit
+          pip-audit --desc
+
       - name: SonarQube code scan
         uses: SonarSource/sonarqube-scan-action@master
         env:
