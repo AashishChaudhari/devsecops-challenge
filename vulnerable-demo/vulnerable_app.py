@@ -1,11 +1,18 @@
 from flask import Flask, request
 from markupsafe import escape
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import sqlite3
-import os
 
 app = Flask(__name__)
 
-# Set up a real SQLite database instead of fake in-memory checks
+# Tracks requests per IP address, in memory (fine for learning/demo purposes)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"]
+)
+
 DB_PATH = "users.db"
 
 def init_db():
@@ -25,22 +32,17 @@ def init_db():
 @app.route("/")
 def home():
     name = request.args.get("name", "Guest")
-    # FIXED: escape() converts <, >, ", ' into safe HTML entities
-    # so the browser displays them as TEXT, never executes them as code
     safe_name = escape(name)
     return f"<h1>Welcome, {safe_name}!</h1>"
 
 @app.route("/login", methods=["GET"])
+@limiter.limit("5 per minute")   # FIXED: max 5 login attempts per minute per IP
 def login():
     username = request.args.get("username", "")
     password = request.args.get("password", "")
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-
-    # FIXED: parameterized query — the ? placeholders mean username/password
-    # are ALWAYS treated as data, never as part of the SQL command itself.
-    # No string ever gets "built" — so there's no query for an attacker to break out of.
     cursor.execute(
         "SELECT * FROM users WHERE username = ? AND password = ?",
         (username, password)
