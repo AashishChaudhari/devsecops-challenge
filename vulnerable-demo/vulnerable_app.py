@@ -52,6 +52,24 @@ def home():
     safe_name = escape(name)
     return f"<h1>Welcome, {safe_name}!</h1>"
 
+@app.route("/login-page")
+def login_page():
+    return """
+    <html>
+    <head><title>Login</title></head>
+    <body style="font-family: sans-serif; max-width: 400px; margin: 80px auto;">
+        <h2>Login</h2>
+        <form action="/login" method="get">
+            <label>Username:</label><br>
+            <input type="text" name="username" required><br><br>
+            <label>Password:</label><br>
+            <input type="password" name="password" required><br><br>
+            <button type="submit">Log in</button>
+        </form>
+    </body>
+    </html>
+    """
+
 @app.route("/login", methods=["GET"])
 @limiter.limit("5 per minute")
 def login():
