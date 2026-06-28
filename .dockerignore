@@ -1,0 +1,30 @@
+# Version control
+.git
+.gitignore
+
+# Python environment
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# CI/CD configs — not needed inside the container
+.github/
+
+# Tests — not needed at runtime
+test_app.py
+
+# Documentation
+README.md
+*.md
+
+# Separate sub-project — never belongs in this image
+vulnerable-demo/
+
+# OS / editor junk
+.DS_Store
+*.swp
+
+# SonarQube
+.scannerwork/
+sonar-project.properties
