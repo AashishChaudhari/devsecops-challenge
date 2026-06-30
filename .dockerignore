@@ -28,3 +28,4 @@ vulnerable-demo/
 # SonarQube
 .scannerwork/
 sonar-project.properties
+*.db
