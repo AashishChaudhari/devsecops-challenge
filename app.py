@@ -1,4 +1,6 @@
 from flask import Flask
+from database import init_db, get_db
+
 
 app = Flask(__name__)
 
@@ -25,6 +27,10 @@ def home():
 @app.route("/health")
 def health():
     return {"status": "ok"}
+
+from database import init_db, get_db
+
+init_db()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

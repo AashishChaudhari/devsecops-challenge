@@ -25,3 +25,11 @@ def test_security_headers(client):
     assert "form-action" in response.headers.get("Content-Security-Policy", "")
     assert response.headers.get("Cache-Control") == "no-store"
     assert response.headers.get("Cross-Origin-Resource-Policy") == "same-origin"
+
+def test_database_initializes():
+    from database import init_db, get_db
+    init_db()
+    with get_db() as conn:
+        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+        result = cursor.fetchone()
+        assert result is not None
