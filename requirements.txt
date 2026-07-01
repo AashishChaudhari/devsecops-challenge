@@ -1,3 +1,4 @@
+bcrypt==5.0.0
 blinker==1.9.0
 boolean.py==5.0
 CacheControl==0.14.4

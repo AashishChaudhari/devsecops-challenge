@@ -33,3 +33,40 @@ def test_database_initializes():
         cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
         result = cursor.fetchone()
         assert result is not None
+
+def test_register_success(client):
+    response = client.post("/register", data={
+        "username": "newuser",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    assert response.status_code == 201
+
+def test_register_duplicate_username(client):
+    client.post("/register", data={
+        "username": "dupuser",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    response = client.post("/register", data={
+        "username": "dupuser",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    assert response.status_code == 409
+
+def test_register_short_password(client):
+    response = client.post("/register", data={
+        "username": "shortpass",
+        "password": "short",
+        "confirm_password": "short"
+    })
+    assert response.status_code == 400
+
+def test_register_password_mismatch(client):
+    response = client.post("/register", data={
+        "username": "mismatch",
+        "password": "securepass123",
+        "confirm_password": "differentpass"
+    })
+    assert response.status_code == 400
