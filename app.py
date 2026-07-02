@@ -1,9 +1,12 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, session, redirect, url_for
 from markupsafe import escape
 import bcrypt
+import os
+import secrets
 from database import init_db, get_db
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 
 def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -56,7 +59,6 @@ def register():
     password = request.form.get("password", "")
     confirm_password = request.form.get("confirm_password", "")
 
-    # Input validation
     if not username or not password:
         return {"error": "Username and password are required"}, 400
 
@@ -69,10 +71,8 @@ def register():
     if password != confirm_password:
         return {"error": "Passwords do not match"}, 400
 
-    # Hash the password
     password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
 
-    # Insert into database
     try:
         with get_db() as conn:
             conn.execute(
@@ -82,10 +82,74 @@ def register():
         return {"message": f"Account created successfully! Welcome, {escape(username)}"}, 201
 
     except Exception as e:
-        # The UNIQUE constraint on username will raise an error for duplicates
         if "UNIQUE constraint failed" in str(e):
             return {"error": "Username already taken"}, 409
         return {"error": "Registration failed"}, 500
+
+@app.route("/login-page")
+def login_page():
+    if "user_id" in session:
+        return redirect(url_for("dashboard"))
+    return """
+    <html>
+    <head><title>Login</title></head>
+    <body style="font-family: sans-serif; max-width: 400px; margin: 80px auto;">
+        <h2>Login</h2>
+        <form action="/login" method="post">
+            <label>Username:</label><br>
+            <input type="text" name="username" required><br><br>
+            <label>Password:</label><br>
+            <input type="password" name="password" required><br><br>
+            <button type="submit">Log in</button>
+        </form>
+        <p>Don't have an account? <a href="/register">Register</a></p>
+    </body>
+    </html>
+    """
+
+@app.route("/login", methods=["POST"])
+def login():
+    username = request.form.get("username", "").strip()
+    password = request.form.get("password", "")
+
+    if not username or not password:
+        return {"error": "Username and password are required"}, 400
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, password_hash FROM users WHERE username = ?",
+            (username,)
+        ).fetchone()
+
+    if row and bcrypt.checkpw(password.encode("utf-8"), row["password_hash"]):
+        session.clear()
+        session["user_id"] = row["id"]
+        session["username"] = username
+        return redirect(url_for("dashboard"))
+
+    return {"error": "Invalid username or password"}, 401
+
+@app.route("/dashboard")
+def dashboard():
+    if "user_id" not in session:
+        return redirect(url_for("login_page"))
+    username = escape(session["username"])
+    return f"""
+    <html>
+    <head><title>Dashboard</title></head>
+    <body style="font-family: sans-serif; max-width: 400px; margin: 80px auto;">
+        <h2>Welcome, {username}!</h2>
+        <p>You are logged in.</p>
+        <p>User ID: {session['user_id']}</p>
+        <a href="/logout">Log out</a>
+    </body>
+    </html>
+    """
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
 
 init_db()
 
