@@ -70,3 +70,47 @@ def test_register_password_mismatch(client):
         "confirm_password": "differentpass"
     })
     assert response.status_code == 400
+
+def test_login_success(client):
+    # Register first
+    client.post("/register", data={
+        "username": "loginuser",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    # Then login
+    response = client.post("/login", data={
+        "username": "loginuser",
+        "password": "securepass123"
+    })
+    assert response.status_code == 302  # redirect to dashboard
+
+def test_login_wrong_password(client):
+    client.post("/register", data={
+        "username": "loginuser2",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    response = client.post("/login", data={
+        "username": "loginuser2",
+        "password": "wrongpassword"
+    })
+    assert response.status_code == 401
+
+def test_dashboard_requires_login(client):
+    response = client.get("/dashboard")
+    assert response.status_code == 302  # redirects to login
+
+def test_logout_clears_session(client):
+    client.post("/register", data={
+        "username": "logoutuser",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    client.post("/login", data={
+        "username": "logoutuser",
+        "password": "securepass123"
+    })
+    client.get("/logout")
+    response = client.get("/dashboard")
+    assert response.status_code == 302  # back to login after logout
