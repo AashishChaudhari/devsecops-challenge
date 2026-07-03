@@ -114,3 +114,28 @@ def test_logout_clears_session(client):
     client.get("/logout")
     response = client.get("/dashboard")
     assert response.status_code == 302  # back to login after logout
+
+def test_login_with_remember_me(client):
+    client.post("/register", data={
+        "username": "rememberuser",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    response = client.post("/login", data={
+        "username": "rememberuser",
+        "password": "securepass123",
+        "remember_me": "1"
+    })
+    assert response.status_code == 302
+
+def test_login_without_remember_me(client):
+    client.post("/register", data={
+        "username": "norememberuser",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    response = client.post("/login", data={
+        "username": "norememberuser",
+        "password": "securepass123"
+    })
+    assert response.status_code == 302

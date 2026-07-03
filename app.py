@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, session, redirect, url_for
 from markupsafe import escape
+from datetime import timedelta
 import bcrypt
 import os
 import secrets
@@ -7,6 +8,9 @@ from database import init_db, get_db
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -19,6 +23,23 @@ def add_security_headers(response):
     response.headers['Cache-Control'] = 'no-store'
     response.headers['Server'] = 'webserver'
     return response
+
+from datetime import datetime, timezone
+
+@app.before_request
+def check_session_expiry():
+    if "user_id" in session:
+        last_active = session.get("last_active")
+        now = datetime.now(timezone.utc).isoformat()
+
+        if last_active:
+            last_active_dt = datetime.fromisoformat(last_active)
+            # Force logout after 30 days regardless of cookie
+            if (datetime.now(timezone.utc) - last_active_dt).days >= 30:
+                session.clear()
+                return redirect(url_for("login_page"))
+
+        session["last_active"] = now
 
 @app.after_request
 def apply_security_headers(response):
@@ -100,6 +121,10 @@ def login_page():
             <input type="text" name="username" required><br><br>
             <label>Password:</label><br>
             <input type="password" name="password" required><br><br>
+            <label>
+                <input type="checkbox" name="remember_me" value="1">
+                Remember me for 30 days
+            </label><br><br>
             <button type="submit">Log in</button>
         </form>
         <p>Don't have an account? <a href="/register">Register</a></p>
@@ -111,6 +136,7 @@ def login_page():
 def login():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
+    remember_me = request.form.get("remember_me") == "1"
 
     if not username or not password:
         return {"error": "Username and password are required"}, 400
@@ -125,6 +151,14 @@ def login():
         session.clear()
         session["user_id"] = row["id"]
         session["username"] = username
+
+        if remember_me:
+            # Makes the cookie persist on disk for PERMANENT_SESSION_LIFETIME
+            session.permanent = True
+        else:
+            # Session cookie only — disappears when browser closes
+            session.permanent = False
+
         return redirect(url_for("dashboard"))
 
     return {"error": "Invalid username or password"}, 401
@@ -134,6 +168,8 @@ def dashboard():
     if "user_id" not in session:
         return redirect(url_for("login_page"))
     username = escape(session["username"])
+    last_active = session.get("last_active", "Unknown")
+    session_type = "Persistent (30 days)" if session.permanent else "Session only"
     return f"""
     <html>
     <head><title>Dashboard</title></head>
@@ -141,6 +177,8 @@ def dashboard():
         <h2>Welcome, {username}!</h2>
         <p>You are logged in.</p>
         <p>User ID: {session['user_id']}</p>
+        <p>Session type: {session_type}</p>
+        <p>Last active: {last_active}</p>
         <a href="/logout">Log out</a>
     </body>
     </html>
