@@ -1,3 +1,4 @@
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask import Flask, request, jsonify, session, redirect, url_for
 from markupsafe import escape
 from datetime import timedelta
@@ -8,6 +9,7 @@ from database import init_db, get_db
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+csrf = CSRFProtect(app)
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -55,12 +57,14 @@ def health():
 
 @app.route("/register", methods=["GET"])
 def register_page():
-    return """
+    token = generate_csrf()
+    return f"""
     <html>
     <head><title>Register</title></head>
     <body style="font-family: sans-serif; max-width: 400px; margin: 80px auto;">
         <h2>Create an account</h2>
         <form action="/register" method="post">
+            <input type="hidden" name="csrf_token" value="{token}">
             <label>Username:</label><br>
             <input type="text" name="username" required minlength="3" maxlength="30"><br><br>
             <label>Password:</label><br>
@@ -111,12 +115,14 @@ def register():
 def login_page():
     if "user_id" in session:
         return redirect(url_for("dashboard"))
-    return """
+    token = generate_csrf()
+    return f"""
     <html>
     <head><title>Login</title></head>
     <body style="font-family: sans-serif; max-width: 400px; margin: 80px auto;">
         <h2>Login</h2>
         <form action="/login" method="post">
+            <input type="hidden" name="csrf_token" value="{token}">
             <label>Username:</label><br>
             <input type="text" name="username" required><br><br>
             <label>Password:</label><br>
