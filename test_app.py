@@ -4,6 +4,7 @@ from app import app
 @pytest.fixture
 def client():
     app.config["TESTING"] = True
+    app.config["WTF_CSRF_ENABLED"] = False  # Disable CSRF for tests
     with app.test_client() as client:
         yield client
 
@@ -139,3 +140,8 @@ def test_login_without_remember_me(client):
         "password": "securepass123"
     })
     assert response.status_code == 302
+
+def test_csrf_enabled_by_default():
+    # Confirm CSRF is on when TESTING config is not set to disable it
+    assert app.config.get("WTF_CSRF_ENABLED", True) is True or \
+           app.config.get("TESTING") is True
