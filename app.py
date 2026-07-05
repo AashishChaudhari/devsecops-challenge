@@ -1,7 +1,10 @@
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect, generate_csrf
 from flask import Flask, request, jsonify, session, redirect, url_for
 from markupsafe import escape
 from datetime import timedelta
+from flask_limiter.errors import RateLimitExceeded
 import bcrypt
 import os
 import secrets
@@ -10,6 +13,12 @@ from database import init_db, get_db
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 csrf = CSRFProtect(app)
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://"
+)
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -56,6 +65,7 @@ def health():
     return {"status": "ok"}
 
 @app.route("/register", methods=["GET"])
+@limiter.limit("10 per hour")
 def register_page():
     token = generate_csrf()
     return f"""
@@ -139,6 +149,7 @@ def login_page():
     """
 
 @app.route("/login", methods=["POST"])
+@limiter.limit("5 per minute")
 def login():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
@@ -168,6 +179,13 @@ def login():
         return redirect(url_for("dashboard"))
 
     return {"error": "Invalid username or password"}, 401
+
+@app.errorhandler(RateLimitExceeded)
+def handle_rate_limit(e):
+    return {
+        "error": "Too many requests. Please slow down and try again later.",
+        "retry_after": str(e.description)
+    }, 429
 
 @app.route("/dashboard")
 def dashboard():

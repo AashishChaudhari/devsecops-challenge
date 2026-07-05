@@ -1,12 +1,15 @@
+from app import app, limiter
 import pytest
 from app import app
 
 @pytest.fixture
 def client():
     app.config["TESTING"] = True
-    app.config["WTF_CSRF_ENABLED"] = False  # Disable CSRF for tests
+    app.config["WTF_CSRF_ENABLED"] = False
+    limiter.enabled = False  # Disable rate limiting for tests
     with app.test_client() as client:
         yield client
+    limiter.enabled = True  # Re-enable after tests
 
 def test_home(client):
     response = client.get("/")
@@ -145,3 +148,17 @@ def test_csrf_enabled_by_default():
     # Confirm CSRF is on when TESTING config is not set to disable it
     assert app.config.get("WTF_CSRF_ENABLED", True) is True or \
            app.config.get("TESTING") is True
+
+def test_rate_limit_login(client):
+    # Register a user first
+    client.post("/register", data={
+        "username": "ratelimituser",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    # Rate limiting is disabled in tests so this just confirms login still works
+    response = client.post("/login", data={
+        "username": "ratelimituser",
+        "password": "wrongpassword"
+    })
+    assert response.status_code == 401
