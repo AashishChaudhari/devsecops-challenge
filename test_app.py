@@ -162,3 +162,62 @@ def test_rate_limit_login(client):
         "password": "wrongpassword"
     })
     assert response.status_code == 401
+
+def test_change_password_success(client):
+    client.post("/register", data={
+        "username": "changeuser",
+        "password": "oldpassword123",
+        "confirm_password": "oldpassword123"
+    })
+    client.post("/login", data={
+        "username": "changeuser",
+        "password": "oldpassword123"
+    })
+    response = client.post("/change-password", data={
+        "current_password": "oldpassword123",
+        "new_password": "newpassword456",
+        "confirm_password": "newpassword456"
+    })
+    assert response.status_code == 302
+
+def test_change_password_wrong_current(client):
+    client.post("/register", data={
+        "username": "changeuser2",
+        "password": "oldpassword123",
+        "confirm_password": "oldpassword123"
+    })
+    client.post("/login", data={
+        "username": "changeuser2",
+        "password": "oldpassword123"
+    })
+    response = client.post("/change-password", data={
+        "current_password": "wrongpassword",
+        "new_password": "newpassword456",
+        "confirm_password": "newpassword456"
+    })
+    assert response.status_code == 401
+
+def test_change_password_requires_login(client):
+    response = client.post("/change-password", data={
+        "current_password": "oldpassword123",
+        "new_password": "newpassword456",
+        "confirm_password": "newpassword456"
+    })
+    assert response.status_code == 401
+
+def test_change_password_same_as_old(client):
+    client.post("/register", data={
+        "username": "changeuser3",
+        "password": "oldpassword123",
+        "confirm_password": "oldpassword123"
+    })
+    client.post("/login", data={
+        "username": "changeuser3",
+        "password": "oldpassword123"
+    })
+    response = client.post("/change-password", data={
+        "current_password": "oldpassword123",
+        "new_password": "oldpassword123",
+        "confirm_password": "oldpassword123"
+    })
+    assert response.status_code == 400

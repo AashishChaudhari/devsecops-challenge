@@ -203,6 +203,7 @@ def dashboard():
         <p>User ID: {session['user_id']}</p>
         <p>Session type: {session_type}</p>
         <p>Last active: {last_active}</p>
+        <p><a href="/change-password">Change password</a></p>
         <a href="/logout">Log out</a>
     </body>
     </html>
@@ -210,6 +211,77 @@ def dashboard():
 
 @app.route("/logout")
 def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
+
+@app.route("/change-password", methods=["GET"])
+def change_password_page():
+    if "user_id" not in session:
+        return redirect(url_for("login_page"))
+    token = generate_csrf()
+    return f"""
+    <html>
+    <head><title>Change Password</title></head>
+    <body style="font-family: sans-serif; max-width: 400px; margin: 80px auto;">
+        <h2>Change Password</h2>
+        <form action="/change-password" method="post">
+            <input type="hidden" name="csrf_token" value="{token}">
+            <label>Current password:</label><br>
+            <input type="password" name="current_password" required><br><br>
+            <label>New password:</label><br>
+            <input type="password" name="new_password" required minlength="8"><br><br>
+            <label>Confirm new password:</label><br>
+            <input type="password" name="confirm_password" required minlength="8"><br><br>
+            <button type="submit">Change Password</button>
+        </form>
+        <p><a href="/dashboard">Back to dashboard</a></p>
+    </body>
+    </html>
+    """
+
+@app.route("/change-password", methods=["POST"])
+@limiter.limit("5 per hour")
+def change_password():
+    if "user_id" not in session:
+        return {"error": "Not logged in"}, 401
+
+    current_password = request.form.get("current_password", "")
+    new_password = request.form.get("new_password", "")
+    confirm_password = request.form.get("confirm_password", "")
+
+    # Validation
+    if not current_password or not new_password:
+        return {"error": "All fields are required"}, 400
+
+    if len(new_password) < 8:
+        return {"error": "New password must be at least 8 characters"}, 400
+
+    if new_password != confirm_password:
+        return {"error": "New passwords do not match"}, 400
+
+    if current_password == new_password:
+        return {"error": "New password must be different from current password"}, 400
+
+    # Verify current password
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT password_hash FROM users WHERE id = ?",
+            (session["user_id"],)
+        ).fetchone()
+
+    if not row or not bcrypt.checkpw(current_password.encode("utf-8"), row["password_hash"]):
+        return {"error": "Current password is incorrect"}, 401
+
+    # Hash and save new password
+    new_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt())
+
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (new_hash, session["user_id"])
+        )
+
+    # Clear session — force re-login with new password
     session.clear()
     return redirect(url_for("login_page"))
 
