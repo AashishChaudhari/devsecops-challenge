@@ -1,147 +1,126 @@
-<div align="center">
-<img src="docs/imgs/logo.png" width="200">
+# DevSecOps Challenge — Secure CI/CD Pipeline with Full Auth System
 
-[![GitHub Release][release-img]][release]
-[![Test][test-img]][test]
-[![Go Report Card][go-report-img]][go-report]
-[![License: Apache-2.0][license-img]][license]
-[![GitHub Downloads][github-downloads-img]][release]
-![Docker Pulls][docker-pulls]
+A production-grade DevSecOps project built from scratch over 60 days as part of Leapfrog Technology's [#60DaysOfLearning2026](https://twitter.com/hashtag/60DaysOfLearning2026) challenge.
 
-[📖 Documentation][docs]
-</div>
+This repo demonstrates the full DevSecOps lifecycle: a Flask web application with a complete authentication system, protected by an automated CI/CD pipeline with six security scanning tools and enforced branch protection.
 
-Trivy ([pronunciation][pronunciation]) is a comprehensive and versatile security scanner.
-Trivy has *scanners* that look for security issues, and *targets* where it can find those issues.
+---
 
-Targets (what Trivy can scan):
+## What this project is
 
-- Container Image
-- Filesystem
-- Git Repository (remote)
-- Virtual Machine Image
-- Kubernetes
+A Flask app with real user authentication (registration, login, sessions, password change), secured at every layer — application code, dependencies, container image, and live running app — all gated behind a pipeline that blocks vulnerable code from ever reaching main.
 
-Scanners (what Trivy can find there):
+---
 
-- OS packages and software dependencies in use (SBOM)
-- Known vulnerabilities (CVEs)
-- IaC issues and misconfigurations
-- Sensitive information and secrets
-- Software licenses
+## The CI/CD Security Pipeline
 
-Trivy supports most popular programming languages, operating systems, and platforms. For a complete list, see the [Scanning Coverage] page.
+Every push to a feature branch triggers this pipeline automatically:
 
-To learn more, go to the [Trivy homepage][homepage] for feature highlights, or to the [Documentation site][docs] for detailed information.
+| Step | Tool | What it does | Blocks merge? |
+|---|---|---|---|
+| Secret scanning | Gitleaks | Scans git history for leaked API keys, tokens, passwords | ✅ Yes |
+| Dependency audit | pip-audit | Checks Python packages against PyPI vulnerability database | ✅ Yes |
+| Unit tests | pytest | Runs 15+ tests covering auth flows and security headers | ✅ Yes |
+| Code quality | SonarQube Cloud | Scans for bugs, vulnerabilities, and code smells | ⚠️ Reports only |
+| Container build | Docker | Multi-stage build with non-root user and .dockerignore | — |
+| Container scan | Trivy | Scans Docker image for OS-level CVEs (HIGH/CRITICAL) | ✅ Yes |
+| Live app scan | OWASP ZAP | Attacks the running app like a real attacker would | ⚠️ Reports only |
 
-## Quick Start
+Nothing merges to `main` without passing all blocking checks. Branch protection enforces this — even for the repo owner.
 
-### Get Trivy
+---
 
-Trivy is available in most common distribution channels. The full list of installation options is available in the [Installation] page. Here are a few popular examples:
+## Application Security Features
 
-- `brew install trivy`
-- `docker run aquasec/trivy`
-- Download binary from <https://github.com/aquasecurity/trivy/releases/latest/>
-- See [Installation] for more
+**Authentication system**
+- User registration with input validation (length, format, duplicates)
+- bcrypt password hashing with automatic salting
+- Real login sessions with signed, HttpOnly, SameSite cookies
+- Session expiry with server-side enforcement
+- Remember Me (30-day persistent sessions)
+- Secure password change requiring current password verification
+- CSRF protection on every form (Flask-WTF)
+- Rate limiting: 5 login attempts/minute, 10 registrations/hour, 5 password changes/hour
 
-Trivy is integrated with many popular platforms and applications. The complete list of integrations is available in the [Ecosystem] page. Here are a few popular examples:
+**HTTP Security Headers (on every response)**
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Content-Security-Policy: default-src 'self'`
+- `Permissions-Policy`
+- `Cross-Origin-Embedder-Policy`
+- `Cross-Origin-Opener-Policy`
+- `Cross-Origin-Resource-Policy`
+- `Cache-Control: no-store`
 
-- [GitHub Actions](https://github.com/aquasecurity/trivy-action)
-- [Kubernetes operator](https://github.com/aquasecurity/trivy-operator)
-- [VS Code plugin](https://github.com/aquasecurity/trivy-vscode-extension)
-- See [Ecosystem] for more
+**Container hardening**
+- Multi-stage Docker build (no build tools in final image)
+- Non-root user (`appuser`)
+- `.dockerignore` reduces build context from 72MB to 51KB
+- `HEALTHCHECK` tied to `/health` endpoint
 
-### Canary builds
-There are canary builds ([Docker Hub](https://hub.docker.com/r/aquasec/trivy/tags?page=1&name=canary), [GitHub](https://github.com/aquasecurity/trivy/pkgs/container/trivy/75776514?tag=canary), [ECR](https://gallery.ecr.aws/aquasecurity/trivy#canary) images and [binaries](https://github.com/aquasecurity/trivy/actions/workflows/canary.yaml)) generated with every push to the main branch.
+---
 
-Please be aware: canary builds might have critical bugs, so they are not recommended for use in production.
+## The Vulnerable Demo (Security Case Study)
 
-### General usage
+`/vulnerable-demo` contains a deliberately broken Flask app used to demonstrate the full vulnerability lifecycle:
+
+1. Built with classic XSS and SQL injection bugs
+2. Exploited manually to understand the root cause
+3. Scanned with OWASP ZAP's active scanner
+4. Fixed with output escaping and parameterized queries
+5. Hardened with rate limiting and bcrypt hashing
+6. Re-scanned to confirm fixes — ZAP results went from 2 WARN-NEW to 0
+
+See [`/vulnerable-demo/README.md`](./vulnerable-demo/README.md) for the full before/after writeup.
+
+---
+
+## Tech Stack
+
+| Layer | Tools |
+|---|---|
+| App | Python, Flask, SQLite, bcrypt, Flask-WTF, Flask-Limiter |
+| CI/CD | GitHub Actions |
+| Security scanning | Gitleaks, pip-audit, SonarQube Cloud, Trivy, OWASP ZAP |
+| Container | Docker (multi-stage, non-root) |
+| Code quality | SonarQube Cloud |
+
+---
+
+## Running locally
 
 ```bash
-trivy <target> [--scanners <scanner1,scanner2>] <subject>
+git clone https://github.com/AashishChaudhari/devsecops-challenge.git
+cd devsecops-challenge
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 app.py
 ```
 
-Examples:
+Visit `http://localhost:5000`
+
+Routes:
+- `/` — home
+- `/health` — health check (used by Docker HEALTHCHECK)
+- `/register` — create an account
+- `/login-page` — log in
+- `/dashboard` — protected, requires login
+- `/change-password` — update password (requires login)
+- `/logout` — end session
+
+---
+
+## Running the tests
 
 ```bash
-trivy image python:3.4-alpine
+pytest test_app.py -v
 ```
 
-<details>
-<summary>Result</summary>
+---
 
-https://github.com/user-attachments/assets/af1c11e7-d9c5-48af-8e05-cb34dfd6352a
+## Project background
 
-</details>
+Built as part of Leapfrog Technology's #60DaysOfLearning2026 challenge — one day at a time, from absolute Linux beginner to a working DevSecOps pipeline with a real authentication system.
 
-```bash
-trivy fs --scanners vuln,secret,misconfig myproject/
-```
-
-<details>
-<summary>Result</summary>
-
-https://github.com/user-attachments/assets/6b3894b7-77c5-4ffc-ac94-ffe6648a30dc
-
-</details>
-
-```bash
-trivy k8s --report summary cluster
-```
-
-<details>
-<summary>Result</summary>
-
-![k8s summary](docs/imgs/trivy-k8s.png)
-
-</details>
-
-## FAQ
-
-### How to pronounce the name "Trivy"?
-
-`tri` is pronounced like **tri**gger, `vy` is pronounced like en**vy**.
-
-## Want more? Check out Aqua
-
-If you liked Trivy, you will love Aqua which builds on top of Trivy to provide even more enhanced capabilities for a complete security management offering.  
-You can find a high level comparison table specific to Trivy users [here](https://trivy.dev/docs/latest/commercial/compare/).
-In addition check out the <https://aquasec.com> website for more information about our products and services.
-If you'd like to contact Aqua or request a demo, please use this form: <https://www.aquasec.com/demo>
-
-## Community
-
-Trivy is an [Aqua Security][aquasec] open source project.  
-Learn about our open source work and portfolio [here][oss].  
-Contact us about any matter by opening a GitHub Discussion [here][discussions]
-
-Please ensure to abide by our [Code of Conduct][code-of-conduct] during all interactions.
-
-[test]: https://github.com/aquasecurity/trivy/actions/workflows/test.yaml
-[test-img]: https://github.com/aquasecurity/trivy/actions/workflows/test.yaml/badge.svg
-[go-report]: https://goreportcard.com/report/github.com/aquasecurity/trivy
-[go-report-img]: https://goreportcard.com/badge/github.com/aquasecurity/trivy
-[release]: https://github.com/aquasecurity/trivy/releases
-[release-img]: https://img.shields.io/github/release/aquasecurity/trivy.svg?logo=github
-[github-downloads-img]: https://img.shields.io/github/downloads/aquasecurity/trivy/total?logo=github
-[docker-pulls]: https://img.shields.io/docker/pulls/aquasec/trivy?logo=docker&label=docker%20pulls%20%2F%20trivy
-[license]: https://github.com/aquasecurity/trivy/blob/main/LICENSE
-[license-img]: https://img.shields.io/badge/License-Apache%202.0-blue.svg
-[homepage]: https://trivy.dev
-[docs]: https://trivy.dev/docs/latest/
-[pronunciation]: #how-to-pronounce-the-name-trivy
-[code-of-conduct]: https://github.com/aquasecurity/community/blob/main/CODE_OF_CONDUCT.md
-
-[Installation]:https://trivy.dev/docs/latest/getting-started/installation/
-[Ecosystem]: https://trivy.dev/docs/latest/ecosystem/
-[Scanning Coverage]: https://trivy.dev/docs/latest/coverage/
-
-[alpine]: https://ariadne.space/2021/06/08/the-vulnerability-remediation-lifecycle-of-alpine-containers/
-[rego]: https://www.openpolicyagent.org/docs/latest/#rego
-[sigstore]: https://www.sigstore.dev/
-
-[aquasec]: https://aquasec.com
-[oss]: https://www.aquasec.com/products/open-source-projects/
-[discussions]: https://github.com/aquasecurity/trivy/discussions
+Daily progress: Twitter/X under [#60DaysOfLearning2026](https://twitter.com/hashtag/60DaysOfLearning2026) and [#LearningWithLeapfrog](https://twitter.com/hashtag/LearningWithLeapfrog), tagging [@lftechnology](https://twitter.com/lftechnology).
