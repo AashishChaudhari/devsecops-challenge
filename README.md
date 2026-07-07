@@ -109,6 +109,13 @@ Routes:
 - `/change-password` — update password (requires login)
 - `/logout` — end session
 
+## API Endpoints
+
+| Method | Route | Auth required | Description |
+|---|---|---|---|
+| GET | `/api/profile` | ✅ Yes | Returns logged-in user's profile as JSON |
+| PUT | `/api/profile` | ✅ Yes | Updates email and bio (rate limited: 10/hour) |
+
 ---
 
 ## Running the tests

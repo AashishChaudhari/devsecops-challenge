@@ -169,6 +169,13 @@ def login():
         session["user_id"] = row["id"]
         session["username"] = username
 
+        # Track last login time
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE users SET last_login = ? WHERE id = ?",
+                (datetime.now(timezone.utc).isoformat(), row["id"])
+            )
+
         if remember_me:
             # Makes the cookie persist on disk for PERMANENT_SESSION_LIFETIME
             session.permanent = True
@@ -204,6 +211,7 @@ def dashboard():
         <p>Session type: {session_type}</p>
         <p>Last active: {last_active}</p>
         <p><a href="/change-password">Change password</a></p>
+	<p><a href="/api/profile">View profile (JSON)</a></p>
         <a href="/logout">Log out</a>
     </body>
     </html>
@@ -284,6 +292,57 @@ def change_password():
     # Clear session — force re-login with new password
     session.clear()
     return redirect(url_for("login_page"))
+
+@app.route("/api/profile", methods=["GET"])
+def api_profile():
+    if "user_id" not in session:
+        return {"error": "Authentication required"}, 401
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, username, email, bio, created_at, last_login FROM users WHERE id = ?",
+            (session["user_id"],)
+        ).fetchone()
+
+    if not row:
+        return {"error": "User not found"}, 404
+
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "email": row["email"],
+        "bio": row["bio"],
+        "created_at": row["created_at"],
+        "last_login": row["last_login"]
+    }, 200
+
+@app.route("/api/profile", methods=["PUT"])
+@limiter.limit("10 per hour")
+def api_update_profile():
+    if "user_id" not in session:
+        return {"error": "Authentication required"}, 401
+
+    data = request.get_json()
+
+    if not data:
+        return {"error": "Request body must be JSON"}, 400
+
+    email = data.get("email", "").strip()
+    bio = data.get("bio", "").strip()
+
+    if email and ("@" not in email or "." not in email.split("@")[-1]):
+        return {"error": "Invalid email format"}, 400
+
+    if len(bio) > 200:
+        return {"error": "Bio must be 200 characters or less"}, 400
+
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE users SET email = ?, bio = ? WHERE id = ?",
+            (email or None, bio, session["user_id"])
+        )
+
+    return {"message": "Profile updated successfully"}, 200
 
 init_db()
 
