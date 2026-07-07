@@ -221,3 +221,72 @@ def test_change_password_same_as_old(client):
         "confirm_password": "oldpassword123"
     })
     assert response.status_code == 400
+
+def test_api_profile_requires_auth(client):
+    response = client.get("/api/profile")
+    assert response.status_code == 401
+
+def test_api_profile_returns_user_data(client):
+    client.post("/register", data={
+        "username": "profileuser",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    client.post("/login", data={
+        "username": "profileuser",
+        "password": "securepass123"
+    })
+    response = client.get("/api/profile")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["username"] == "profileuser"
+    assert "password_hash" not in data  # never expose the hash
+
+def test_api_profile_update(client):
+    client.post("/register", data={
+        "username": "profileuser2",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    client.post("/login", data={
+        "username": "profileuser2",
+        "password": "securepass123"
+    })
+    response = client.put("/api/profile",
+        json={"email": "test@example.com", "bio": "Hello world"},
+        content_type="application/json"
+    )
+    assert response.status_code == 200
+
+def test_api_profile_invalid_email(client):
+    client.post("/register", data={
+        "username": "profileuser3",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    client.post("/login", data={
+        "username": "profileuser3",
+        "password": "securepass123"
+    })
+    response = client.put("/api/profile",
+        json={"email": "notanemail", "bio": "test"},
+        content_type="application/json"
+    )
+    assert response.status_code == 400
+
+def test_api_profile_bio_too_long(client):
+    client.post("/register", data={
+        "username": "profileuser4",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    client.post("/login", data={
+        "username": "profileuser4",
+        "password": "securepass123"
+    })
+    response = client.put("/api/profile",
+        json={"email": "test@example.com", "bio": "x" * 201},
+        content_type="application/json"
+    )
+    assert response.status_code == 400
+
