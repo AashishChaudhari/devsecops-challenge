@@ -290,3 +290,12 @@ def test_api_profile_bio_too_long(client):
     )
     assert response.status_code == 400
 
+def test_app_imports_correctly():
+    from database import init_db, get_db
+    from app import app
+    assert app is not None
+
+def test_health_endpoint(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "ok"

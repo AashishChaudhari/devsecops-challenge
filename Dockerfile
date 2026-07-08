@@ -16,9 +16,14 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 
 COPY app.py .
+COPY database.py .
 
-# Create a non-root user and switch to it
 RUN useradd --create-home --shell /bin/bash appuser
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
+# Give appuser ownership of the app directory so it can create the database file
+RUN chown -R appuser:appuser /app
+
 USER appuser
 
 EXPOSE 5000
