@@ -52,6 +52,14 @@ jobs:
         run: |
           docker build -t devsecops-app:latest .
 
+      - name: Smoke test Docker image
+        run: |
+          docker run -d -p 5000:5000 --name smoke-test devsecops-app:latest
+          sleep 5
+          curl -f http://localhost:5000/health
+          docker stop smoke-test
+          docker rm smoke-test
+
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master
         with:
