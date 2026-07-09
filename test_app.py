@@ -300,3 +300,56 @@ def test_health_endpoint(client):
     assert response.status_code == 200
     assert response.get_json()["status"] == "ok"
 
+def test_username_invalid_characters(client):
+    response = client.post("/register", data={
+        "username": "bad user!",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    assert response.status_code == 400
+
+def test_username_valid_formats(client):
+    for username in ["valid_user", "valid.user", "valid-user", "ValidUser123"]:
+        response = client.post("/register", data={
+            "username": username,
+            "password": "securepass123",
+            "confirm_password": "securepass123"
+        })
+        assert response.status_code == 201
+
+def test_delete_account_requires_login(client):
+    response = client.post("/delete-account", data={"password": "securepass123"})
+    assert response.status_code == 401
+
+def test_delete_account_wrong_password(client):
+    client.post("/register", data={
+        "username": "deleteuser",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    client.post("/login", data={
+        "username": "deleteuser",
+        "password": "securepass123"
+    })
+    response = client.post("/delete-account", data={"password": "wrongpassword"})
+    assert response.status_code == 401
+
+def test_delete_account_success(client):
+    client.post("/register", data={
+        "username": "deleteuser2",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    client.post("/login", data={
+        "username": "deleteuser2",
+        "password": "securepass123"
+    })
+    response = client.post("/delete-account", data={"password": "securepass123"})
+    assert response.status_code == 200
+
+def test_api_stats(client):
+    response = client.get("/api/stats")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert "total_users" in data
+    assert isinstance(data["total_users"], int)
