@@ -8,6 +8,7 @@ from flask_limiter.errors import RateLimitExceeded
 import bcrypt
 import os
 import secrets
+import re
 from database import init_db, get_db
 
 app = Flask(__name__)
@@ -99,6 +100,9 @@ def register():
 
     if len(username) < 3 or len(username) > 30:
         return {"error": "Username must be between 3 and 30 characters"}, 400
+
+    if not re.match(r'^[a-zA-Z0-9_.-]+$', username):
+        return {"error": "Username can only contain letters, numbers, underscores, dots and hyphens"}, 400
 
     if len(password) < 8:
         return {"error": "Password must be at least 8 characters"}, 400
@@ -211,6 +215,7 @@ def dashboard():
         <p>Session type: {session_type}</p>
         <p>Last active: {last_active}</p>
         <p><a href="/change-password">Change password</a></p>
+	<p><a href="/delete-account-page">Delete account</a></p>
 	<p><a href="/api/profile">View profile (JSON)</a></p>
         <a href="/logout">Log out</a>
     </body>
@@ -343,6 +348,62 @@ def api_update_profile():
         )
 
     return {"message": "Profile updated successfully"}, 200
+
+@app.route("/delete-account-page")
+def delete_account_page():
+    if "user_id" not in session:
+        return redirect(url_for("login_page"))
+    token = generate_csrf()
+    return f"""
+    <html>
+    <head><title>Delete Account</title></head>
+    <body style="font-family: sans-serif; max-width: 400px; margin: 80px auto;">
+        <h2>Delete Account</h2>
+        <p style="color: red;">This action is permanent and cannot be undone.</p>
+        <form action="/delete-account" method="post">
+            <input type="hidden" name="csrf_token" value="{token}">
+            <label>Enter your password to confirm:</label><br>
+            <input type="password" name="password" required><br><br>
+            <button type="submit" style="background: red; color: white; padding: 8px 16px;">
+                Delete my account
+            </button>
+        </form>
+        <p><a href="/dashboard">Cancel</a></p>
+    </body>
+    </html>
+    """
+
+@app.route("/delete-account", methods=["POST"])
+@limiter.limit("3 per hour")
+def delete_account():
+    if "user_id" not in session:
+        return {"error": "Not logged in"}, 401
+
+    password = request.form.get("password", "")
+
+    if not password:
+        return {"error": "Password required to delete account"}, 400
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT password_hash FROM users WHERE id = ?",
+            (session["user_id"],)
+        ).fetchone()
+
+    if not row or not bcrypt.checkpw(password.encode("utf-8"), row["password_hash"]):
+        return {"error": "Incorrect password"}, 401
+
+    with get_db() as conn:
+        conn.execute("DELETE FROM users WHERE id = ?", (session["user_id"],))
+
+    session.clear()
+    return {"message": "Account deleted successfully"}, 200
+
+@app.route("/api/stats")
+def api_stats():
+    with get_db() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    return {"total_users": count}, 200
 
 init_db()
 

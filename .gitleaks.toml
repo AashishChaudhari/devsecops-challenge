@@ -1,0 +1,11 @@
+[allowlist]
+  description = "Allowlist for test passwords and known false positives"
+  regexes = [
+    "securepass123",
+    "oldpassword123",
+    "newpassword456",
+    "wrongpassword",
+    "differentpass",
+    "AKIAIOSFODNN7EXAMPLE"
+  ]
+
