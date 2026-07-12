@@ -59,7 +59,7 @@ def apply_security_headers(response):
 
 @app.route("/")
 def home():
-    return "Hello from my DevSecOps app!"
+    return "Hello from my DevSecOps app! Now live on AWS EC2!"
 
 @app.route("/health")
 def health():
