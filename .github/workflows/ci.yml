@@ -94,6 +94,8 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             cd ~/devsecops-challenge
+            git fetch origin
+            git checkout main
             git pull origin main
             docker build -t devsecops-app:latest .
             docker stop devsecops-app || true
