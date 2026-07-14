@@ -12,6 +12,8 @@ import re
 from database import init_db, get_db
 
 app = Flask(__name__)
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 csrf = CSRFProtect(app)
 limiter = Limiter(
