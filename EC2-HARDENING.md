@@ -14,3 +14,16 @@
 
 ## Automatic Updates
 - unattended-upgrades enabled for security patches
+
+## HTTPS / SSL (Let's Encrypt)
+- Domain: aashishchaudhari.duckdns.org (DuckDNS free subdomain)
+- Certificate issued via: certbot --manual --preferred-challenges dns
+- Certificate location: /etc/letsencrypt/live/aashishchaudhari.duckdns.org/
+- Expires: 2026-10-13 (manual renewal required before expiry)
+- Nginx configured to redirect HTTP → HTTPS automatically
+- Port 443 open in both UFW and AWS security group
+
+## Renewal command (run before 2026-10-13)
+Update DuckDNS TXT record then:
+sudo certbot certonly --manual --preferred-challenges dns -d aashishchaudhari.duckdns.org
+sudo systemctl reload nginx
