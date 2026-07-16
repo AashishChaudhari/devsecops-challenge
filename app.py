@@ -1,3 +1,4 @@
+from logger import setup_logging, get_logger
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from flask_wtf.csrf import CSRFProtect, generate_csrf
@@ -12,6 +13,8 @@ import re
 from database import init_db, get_db
 
 app = Flask(__name__)
+setup_logging()
+log = get_logger(__name__)
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
@@ -57,6 +60,13 @@ def check_session_expiry():
 
 @app.after_request
 def apply_security_headers(response):
+    if request.path != "/health":
+        log.info("request",
+            method=request.method,
+            path=request.path,
+            status=response.status_code,
+            ip=request.remote_addr
+        )
     return add_security_headers(response)
 
 @app.route("/")
@@ -98,18 +108,42 @@ def register():
     confirm_password = request.form.get("confirm_password", "")
 
     if not username or not password:
+        log.warning("registration_failed",
+            reason="missing_fields",
+            ip=request.remote_addr
+        )
         return {"error": "Username and password are required"}, 400
 
     if len(username) < 3 or len(username) > 30:
+        log.warning("registration_failed",
+            reason="invalid_username_length",
+            username=username,
+            ip=request.remote_addr
+        )
         return {"error": "Username must be between 3 and 30 characters"}, 400
 
     if not re.match(r'^[a-zA-Z0-9_.-]+$', username):
+        log.warning("registration_failed",
+            reason="invalid_username_format",
+            username=username,
+            ip=request.remote_addr
+        )
         return {"error": "Username can only contain letters, numbers, underscores, dots and hyphens"}, 400
 
     if len(password) < 8:
+        log.warning("registration_failed",
+            reason="password_too_short",
+            username=username,
+            ip=request.remote_addr
+        )
         return {"error": "Password must be at least 8 characters"}, 400
 
     if password != confirm_password:
+        log.warning("registration_failed",
+            reason="password_mismatch",
+            username=username,
+            ip=request.remote_addr
+        )
         return {"error": "Passwords do not match"}, 400
 
     password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
@@ -120,11 +154,25 @@ def register():
                 "INSERT INTO users (username, password_hash) VALUES (?, ?)",
                 (username, password_hash)
             )
+        log.info("registration_success",
+            username=username,
+            ip=request.remote_addr
+        )
         return {"message": f"Account created successfully! Welcome, {escape(username)}"}, 201
 
     except Exception as e:
         if "UNIQUE constraint failed" in str(e):
+            log.warning("registration_failed",
+                reason="username_taken",
+                username=username,
+                ip=request.remote_addr
+            )
             return {"error": "Username already taken"}, 409
+        log.error("registration_error",
+            username=username,
+            error=str(e),
+            ip=request.remote_addr
+        )
         return {"error": "Registration failed"}, 500
 
 @app.route("/login-page")
@@ -175,22 +223,30 @@ def login():
         session["user_id"] = row["id"]
         session["username"] = username
 
-        # Track last login time
         with get_db() as conn:
             conn.execute(
                 "UPDATE users SET last_login = ? WHERE id = ?",
                 (datetime.now(timezone.utc).isoformat(), row["id"])
             )
 
+        log.info("login_success",
+            username=username,
+            ip=request.remote_addr,
+            remember_me=remember_me
+        )
+
         if remember_me:
-            # Makes the cookie persist on disk for PERMANENT_SESSION_LIFETIME
             session.permanent = True
         else:
-            # Session cookie only — disappears when browser closes
             session.permanent = False
 
         return redirect(url_for("dashboard"))
 
+    log.warning("login_failed",
+        username=username,
+        ip=request.remote_addr,
+        user_agent=request.headers.get("User-Agent", "unknown")
+    )
     return {"error": "Invalid username or password"}, 401
 
 @app.errorhandler(RateLimitExceeded)
@@ -296,6 +352,11 @@ def change_password():
             (new_hash, session["user_id"])
         )
 
+    log.info("password_changed",
+        user_id=session["user_id"],
+        ip=request.remote_addr
+    )
+
     # Clear session — force re-login with new password
     session.clear()
     return redirect(url_for("login_page"))
@@ -397,6 +458,11 @@ def delete_account():
 
     with get_db() as conn:
         conn.execute("DELETE FROM users WHERE id = ?", (session["user_id"],))
+
+    log.info("account_deleted",
+        user_id=session["user_id"],
+        ip=request.remote_addr
+    )
 
     session.clear()
     return {"message": "Account deleted successfully"}, 200

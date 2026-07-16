@@ -353,3 +353,19 @@ def test_api_stats(client):
     data = response.get_json()
     assert "total_users" in data
     assert isinstance(data["total_users"], int)
+
+def test_logging_does_not_break_requests(client):
+    response = client.get("/health")
+    assert response.status_code == 200
+
+def test_failed_login_still_returns_401(client):
+    client.post("/register", data={
+        "username": "logtest",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    response = client.post("/login", data={
+        "username": "logtest",
+        "password": "wrongpassword"
+    })
+    assert response.status_code == 401
