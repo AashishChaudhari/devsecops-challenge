@@ -74,6 +74,7 @@ def home():
     return "Hello from my DevSecOps app! Now live on AWS EC2!"
 
 @app.route("/health")
+@limiter.exempt
 def health():
     return {"status": "ok"}
 
