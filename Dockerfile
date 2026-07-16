@@ -17,6 +17,7 @@ COPY --from=builder /install /usr/local
 
 COPY app.py .
 COPY database.py .
+COPY logger.py .
 
 RUN useradd --create-home --shell /bin/bash appuser
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
