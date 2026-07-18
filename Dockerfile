@@ -18,6 +18,7 @@ COPY --from=builder /install /usr/local
 COPY app.py .
 COPY database.py .
 COPY logger.py .
+COPY gunicorn.conf.py .
 
 RUN useradd --create-home --shell /bin/bash appuser
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
@@ -32,4 +33,4 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:5000/health || exit 1
 
-CMD ["python3", "app.py"]
+CMD ["gunicorn", "-c", "gunicorn.conf.py", "app:app"]
