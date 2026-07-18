@@ -369,3 +369,8 @@ def test_failed_login_still_returns_401(client):
         "password": "wrongpassword"
     })
     assert response.status_code == 401
+
+def test_gunicorn_app_callable():
+    from app import app as flask_app
+    assert callable(flask_app)
+    assert flask_app.name == "app"
