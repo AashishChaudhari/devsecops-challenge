@@ -55,7 +55,8 @@ jobs:
 
       - name: Smoke test Docker image
         run: |
-          docker compose up --build -d
+          echo "SECRET_KEY=ci-test-secret-key-not-for-production" > .env
+          docker-compose up --build -d
           echo "Waiting for app to start..."
           for i in {1..15}; do
             sleep 2
@@ -66,7 +67,7 @@ jobs:
             echo "Attempt $i failed, retrying..."
           done
           curl -f http://localhost:5000/health
-          docker compose down
+          docker-compose down
 
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master
@@ -107,7 +108,6 @@ jobs:
             echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" > .env
             docker-compose down
             docker-compose up --build -d
-            docker-compose ps
             sleep 10
-            docker-compose exec -T app curl -f http://localhost:5000/health
+            curl -f http://localhost:5000/health
             docker system prune -f
