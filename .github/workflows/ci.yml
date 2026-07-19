@@ -55,12 +55,18 @@ jobs:
 
       - name: Smoke test Docker image
         run: |
-          docker run -d -p 5000:5000 --name smoke-test devsecops-app:latest
-          sleep 10
-          docker logs smoke-test
+          docker compose up --build -d
+          echo "Waiting for app to start..."
+          for i in {1..15}; do
+            sleep 2
+            if curl -sf http://localhost:5000/health; then
+              echo "App is up!"
+              break
+            fi
+            echo "Attempt $i failed, retrying..."
+          done
           curl -f http://localhost:5000/health
-          docker stop smoke-test
-          docker rm smoke-test
+          docker compose down
 
       - name: Run Trivy vulnerability scan
         uses: aquasecurity/trivy-action@master
@@ -98,10 +104,10 @@ jobs:
             git fetch origin
             git checkout main
             git pull origin main
-            docker build -t devsecops-app:latest .
-            docker stop devsecops-app || true
-            docker rm devsecops-app || true
-            docker run -d -p 5000:5000 --name devsecops-app \
-              -e SECRET_KEY=${{ secrets.SECRET_KEY }} \
-              devsecops-app:latest
+            echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" > .env
+            docker-compose down
+            docker-compose up --build -d
+            docker-compose ps
+            sleep 10
+            docker-compose exec -T app curl -f http://localhost:5000/health
             docker system prune -f
