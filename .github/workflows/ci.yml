@@ -66,6 +66,7 @@ jobs:
             fi
             echo "Attempt $i failed, retrying..."
           done
+          docker compose logs
           curl -f http://localhost:5000/health
           docker compose down
 
