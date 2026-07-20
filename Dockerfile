@@ -19,12 +19,11 @@ COPY app.py .
 COPY database.py .
 COPY logger.py .
 COPY gunicorn.conf.py .
+COPY config.py .
 
 RUN useradd --create-home --shell /bin/bash appuser
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
-
-# Give appuser ownership of the app directory so it can create the database file
-RUN chown -R appuser:appuser /app
+RUN mkdir -p /app/data && chown -R appuser:appuser /app
 
 USER appuser
 

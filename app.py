@@ -1,3 +1,4 @@
+from config import get_config
 from logger import setup_logging, get_logger
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -17,7 +18,7 @@ setup_logging()
 log = get_logger(__name__)
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+app.secret_key = app.config["SECRET_KEY"]
 csrf = CSRFProtect(app)
 limiter = Limiter(
     get_remote_address,
@@ -25,9 +26,8 @@ limiter = Limiter(
     default_limits=["200 per day", "50 per hour"],
     storage_uri="memory://"
 )
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=30)
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config.from_object(get_config())
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=app.config["PERMANENT_SESSION_LIFETIME_DAYS"])
 
 def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
