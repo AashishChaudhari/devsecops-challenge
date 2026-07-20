@@ -4,12 +4,12 @@ from app import app
 
 @pytest.fixture
 def client():
-    app.config["TESTING"] = True
-    app.config["WTF_CSRF_ENABLED"] = False
-    limiter.enabled = False  # Disable rate limiting for tests
+    from config import TestingConfig
+    app.config.from_object(TestingConfig)
+    limiter.enabled = False
     with app.test_client() as client:
         yield client
-    limiter.enabled = True  # Re-enable after tests
+    limiter.enabled = True
 
 def test_home(client):
     response = client.get("/")
@@ -374,3 +374,15 @@ def test_gunicorn_app_callable():
     from app import app as flask_app
     assert callable(flask_app)
     assert flask_app.name == "app"
+
+def test_testing_config_has_csrf_disabled():
+    from config import TestingConfig
+    assert TestingConfig.WTF_CSRF_ENABLED == False
+
+def test_production_config_has_secure_cookies():
+    from config import ProductionConfig
+    assert ProductionConfig.SESSION_COOKIE_SECURE == True
+
+def test_development_config_is_not_testing():
+    from config import DevelopmentConfig
+    assert DevelopmentConfig.TESTING == False

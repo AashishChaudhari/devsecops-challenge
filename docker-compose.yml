@@ -8,6 +8,7 @@ services:
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - DB_PATH=/tmp/app.db
+      - FLASK_ENV=production
     volumes:
       - app_data:/app/data
     healthcheck:
