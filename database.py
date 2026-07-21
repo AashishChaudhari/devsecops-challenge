@@ -18,6 +18,17 @@ def init_db():
             last_login TIMESTAMP
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS api_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            key_hash TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_used TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
     conn.commit()
     conn.close()
 
