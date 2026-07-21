@@ -386,3 +386,60 @@ def test_production_config_has_secure_cookies():
 def test_development_config_is_not_testing():
     from config import DevelopmentConfig
     assert DevelopmentConfig.TESTING == False
+
+def test_create_api_key(client):
+    client.post("/register", data={
+        "username": "apiuser",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    client.post("/login", data={
+        "username": "apiuser",
+        "password": "securepass123"
+    })
+    response = client.post("/api/keys",
+        json={"name": "test-key"},
+        content_type="application/json"
+    )
+    assert response.status_code == 201
+    data = response.get_json()
+    assert "key" in data
+    assert data["key"].startswith("dso_")
+
+def test_api_key_authentication(client):
+    client.post("/register", data={
+        "username": "apikeyuser",
+        "password": "securepass123",
+        "confirm_password": "securepass123"
+    })
+    client.post("/login", data={
+        "username": "apikeyuser",
+        "password": "securepass123"
+    })
+    # Create API key
+    r = client.post("/api/keys",
+        json={"name": "auth-test"},
+        content_type="application/json"
+    )
+    key = r.get_json()["key"]
+    client.get("/logout")
+
+    # Use API key to access profile
+    response = client.get("/api/profile",
+        headers={"Authorization": f"Bearer {key}"}
+    )
+    assert response.status_code == 200
+    assert response.get_json()["username"] == "apikeyuser"
+
+def test_invalid_api_key_rejected(client):
+    response = client.get("/api/profile",
+        headers={"Authorization": "Bearer dso_invalidkey"}
+    )
+    assert response.status_code == 401
+
+def test_api_key_requires_login_to_create(client):
+    response = client.post("/api/keys",
+        json={"name": "no-auth-key"},
+        content_type="application/json"
+    )
+    assert response.status_code == 401

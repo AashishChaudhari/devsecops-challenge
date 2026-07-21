@@ -1,3 +1,4 @@
+from flask_wtf.csrf import CSRFProtect, generate_csrf
 from config import get_config
 from logger import setup_logging, get_logger
 from flask_limiter import Limiter
@@ -7,6 +8,7 @@ from flask import Flask, request, jsonify, session, redirect, url_for
 from markupsafe import escape
 from datetime import timedelta
 from flask_limiter.errors import RateLimitExceeded
+import hashlib
 import bcrypt
 import os
 import secrets
@@ -14,11 +16,13 @@ import re
 from database import init_db, get_db
 
 app = Flask(__name__)
+app.config.from_object(get_config())
+app.secret_key = app.config["SECRET_KEY"]
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=app.config["PERMANENT_SESSION_LIFETIME_DAYS"])
 setup_logging()
 log = get_logger(__name__)
 from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-app.secret_key = app.config["SECRET_KEY"]
 csrf = CSRFProtect(app)
 limiter = Limiter(
     get_remote_address,
@@ -26,8 +30,6 @@ limiter = Limiter(
     default_limits=["200 per day", "50 per hour"],
     storage_uri="memory://"
 )
-app.config.from_object(get_config())
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=app.config["PERMANENT_SESSION_LIFETIME_DAYS"])
 
 def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -363,14 +365,21 @@ def change_password():
     return redirect(url_for("login_page"))
 
 @app.route("/api/profile", methods=["GET"])
+@csrf.exempt
 def api_profile():
-    if "user_id" not in session:
+    # Accept either session or API key
+    user_row = get_api_key_user(request)
+    if user_row:
+        user_id = user_row["id"]
+    elif "user_id" in session:
+        user_id = session["user_id"]
+    else:
         return {"error": "Authentication required"}, 401
 
     with get_db() as conn:
         row = conn.execute(
             "SELECT id, username, email, bio, created_at, last_login FROM users WHERE id = ?",
-            (session["user_id"],)
+            (user_id,)
         ).fetchone()
 
     if not row:
@@ -386,6 +395,7 @@ def api_profile():
     }, 200
 
 @app.route("/api/profile", methods=["PUT"])
+@csrf.exempt
 @limiter.limit("10 per hour")
 def api_update_profile():
     if "user_id" not in session:
@@ -469,10 +479,129 @@ def delete_account():
     return {"message": "Account deleted successfully"}, 200
 
 @app.route("/api/stats")
+@csrf.exempt
 def api_stats():
     with get_db() as conn:
         count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     return {"total_users": count}, 200
+
+def hash_api_key(key):
+    """Hash an API key for storage."""
+    return hashlib.sha256(key.encode()).hexdigest()
+
+def get_api_key_user(request):
+    """Extract and validate API key from request headers."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    key = auth_header[7:]  # Strip "Bearer "
+    key_hash = hash_api_key(key)
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT u.id, u.username FROM users u
+               JOIN api_keys ak ON u.id = ak.user_id
+               WHERE ak.key_hash = ?""",
+            (key_hash,)
+        ).fetchone()
+        if row:
+            # Update last_used timestamp
+            conn.execute(
+                "UPDATE api_keys SET last_used = ? WHERE key_hash = ?",
+                (datetime.now(timezone.utc).isoformat(), key_hash)
+            )
+    return row
+
+@app.route("/api/keys", methods=["GET"])
+@csrf.exempt
+def list_api_keys():
+    if "user_id" not in session:
+        return {"error": "Authentication required"}, 401
+    with get_db() as conn:
+        keys = conn.execute(
+            "SELECT id, name, created_at, last_used FROM api_keys WHERE user_id = ?",
+            (session["user_id"],)
+        ).fetchall()
+    return {
+        "keys": [
+            {
+                "id": row["id"],
+                "name": row["name"],
+                "created_at": row["created_at"],
+                "last_used": row["last_used"]
+            }
+            for row in keys
+        ]
+    }, 200
+
+@app.route("/api/keys", methods=["POST"])
+@csrf.exempt
+@limiter.limit("10 per hour")
+def create_api_key():
+    if "user_id" not in session:
+        return {"error": "Authentication required"}, 401
+
+    data = request.get_json()
+    if not data:
+        return {"error": "Request body must be JSON"}, 400
+
+    name = data.get("name", "").strip()
+    if not name:
+        return {"error": "Key name is required"}, 400
+
+    if len(name) > 50:
+        return {"error": "Key name must be 50 characters or less"}, 400
+
+    # Generate a secure random API key
+    raw_key = f"dso_{secrets.token_urlsafe(32)}"
+    key_hash = hash_api_key(raw_key)
+
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO api_keys (user_id, key_hash, name) VALUES (?, ?, ?)",
+                (session["user_id"], key_hash, name)
+            )
+        log.info("api_key_created",
+            user_id=session["user_id"],
+            key_name=name,
+            ip=request.remote_addr
+        )
+        return {
+            "message": "API key created successfully",
+            "key": raw_key,
+            "name": name,
+            "warning": "Save this key now — it will never be shown again"
+        }, 201
+    except Exception as e:
+        return {"error": "Failed to create API key"}, 500
+
+@app.route("/api/keys/<int:key_id>", methods=["DELETE"])
+@csrf.exempt
+def delete_api_key(key_id):
+    if "user_id" not in session:
+        return {"error": "Authentication required"}, 401
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT user_id FROM api_keys WHERE id = ?",
+            (key_id,)
+        ).fetchone()
+
+    if not row:
+        return {"error": "Key not found"}, 404
+
+    if row["user_id"] != session["user_id"]:
+        return {"error": "Not authorized"}, 403
+
+    with get_db() as conn:
+        conn.execute("DELETE FROM api_keys WHERE id = ?", (key_id,))
+
+    log.info("api_key_deleted",
+        user_id=session["user_id"],
+        key_id=key_id,
+        ip=request.remote_addr
+    )
+    return {"message": "API key deleted"}, 200
 
 init_db()
 
