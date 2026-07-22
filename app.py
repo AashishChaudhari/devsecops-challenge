@@ -1,27 +1,31 @@
-from flask_wtf.csrf import CSRFProtect, generate_csrf
-from config import get_config
-from logger import setup_logging, get_logger
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from flask_wtf.csrf import CSRFProtect, generate_csrf
-from flask import Flask, request, jsonify, session, redirect, url_for
-from markupsafe import escape
-from datetime import timedelta
-from flask_limiter.errors import RateLimitExceeded
-import hashlib
-import bcrypt
-import os
-import secrets
-import re
+from datetime import datetime, timezone
+from werkzeug.middleware.proxy_fix import ProxyFix
 from database import init_db, get_db
+import re
+import secrets
+import os
+import bcrypt
+import hashlib
+from flask_limiter.errors import RateLimitExceeded
+from datetime import timedelta
+from markupsafe import escape
+from flask import Flask, request, jsonify, session, redirect, url_for
+from flask_limiter.util import get_remote_address
+from flask_limiter import Limiter
+from logger import setup_logging, get_logger
+from config import get_config
+from flask_wtf.csrf import CSRFProtect, generate_csrf
+from notifications import alert_failed_login, alert_account_deleted, alert_new_registration, alert_rate_limit_hit
+from dotenv import load_dotenv
+load_dotenv()
 
 app = Flask(__name__)
 app.config.from_object(get_config())
 app.secret_key = app.config["SECRET_KEY"]
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=app.config["PERMANENT_SESSION_LIFETIME_DAYS"])
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
+    days=app.config["PERMANENT_SESSION_LIFETIME_DAYS"])
 setup_logging()
 log = get_logger(__name__)
-from werkzeug.middleware.proxy_fix import ProxyFix
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 csrf = CSRFProtect(app)
 limiter = Limiter(
@@ -30,6 +34,7 @@ limiter = Limiter(
     default_limits=["200 per day", "50 per hour"],
     storage_uri="memory://"
 )
+
 
 def add_security_headers(response):
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -43,7 +48,6 @@ def add_security_headers(response):
     response.headers['Server'] = 'webserver'
     return response
 
-from datetime import datetime, timezone
 
 @app.before_request
 def check_session_expiry():
@@ -60,25 +64,29 @@ def check_session_expiry():
 
         session["last_active"] = now
 
+
 @app.after_request
 def apply_security_headers(response):
     if request.path != "/health":
         log.info("request",
-            method=request.method,
-            path=request.path,
-            status=response.status_code,
-            ip=request.remote_addr
-        )
+                 method=request.method,
+                 path=request.path,
+                 status=response.status_code,
+                 ip=request.remote_addr
+                 )
     return add_security_headers(response)
+
 
 @app.route("/")
 def home():
     return "Hello from my DevSecOps app! Now live on AWS EC2!"
 
+
 @app.route("/health")
 @limiter.exempt
 def health():
     return {"status": "ok"}
+
 
 @app.route("/register", methods=["GET"])
 @limiter.limit("10 per hour")
@@ -104,6 +112,7 @@ def register_page():
     </html>
     """
 
+
 @app.route("/register", methods=["POST"])
 def register():
     username = request.form.get("username", "").strip()
@@ -112,41 +121,42 @@ def register():
 
     if not username or not password:
         log.warning("registration_failed",
-            reason="missing_fields",
-            ip=request.remote_addr
-        )
+                    reason="missing_fields",
+                    ip=request.remote_addr
+                    )
         return {"error": "Username and password are required"}, 400
 
     if len(username) < 3 or len(username) > 30:
         log.warning("registration_failed",
-            reason="invalid_username_length",
-            username=username,
-            ip=request.remote_addr
-        )
+                    reason="invalid_username_length",
+                    username=username,
+                    ip=request.remote_addr
+                    )
         return {"error": "Username must be between 3 and 30 characters"}, 400
 
     if not re.match(r'^[a-zA-Z0-9_.-]+$', username):
         log.warning("registration_failed",
-            reason="invalid_username_format",
-            username=username,
-            ip=request.remote_addr
-        )
-        return {"error": "Username can only contain letters, numbers, underscores, dots and hyphens"}, 400
+                    reason="invalid_username_format",
+                    username=username,
+                    ip=request.remote_addr
+                    )
+        return {
+            "error": "Username can only contain letters, numbers, underscores, dots and hyphens"}, 400
 
     if len(password) < 8:
         log.warning("registration_failed",
-            reason="password_too_short",
-            username=username,
-            ip=request.remote_addr
-        )
+                    reason="password_too_short",
+                    username=username,
+                    ip=request.remote_addr
+                    )
         return {"error": "Password must be at least 8 characters"}, 400
 
     if password != confirm_password:
         log.warning("registration_failed",
-            reason="password_mismatch",
-            username=username,
-            ip=request.remote_addr
-        )
+                    reason="password_mismatch",
+                    username=username,
+                    ip=request.remote_addr
+                    )
         return {"error": "Passwords do not match"}, 400
 
     password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
@@ -158,25 +168,28 @@ def register():
                 (username, password_hash)
             )
         log.info("registration_success",
-            username=username,
-            ip=request.remote_addr
-        )
-        return {"message": f"Account created successfully! Welcome, {escape(username)}"}, 201
+                 username=username,
+                 ip=request.remote_addr
+                 )
+        alert_new_registration(username, request.remote_addr)
+        return {
+            "message": f"Account created successfully! Welcome, {escape(username)}"}, 201
 
     except Exception as e:
         if "UNIQUE constraint failed" in str(e):
             log.warning("registration_failed",
-                reason="username_taken",
-                username=username,
-                ip=request.remote_addr
-            )
+                        reason="username_taken",
+                        username=username,
+                        ip=request.remote_addr
+                        )
             return {"error": "Username already taken"}, 409
         log.error("registration_error",
-            username=username,
-            error=str(e),
-            ip=request.remote_addr
-        )
+                  username=username,
+                  error=str(e),
+                  ip=request.remote_addr
+                  )
         return {"error": "Registration failed"}, 500
+
 
 @app.route("/login-page")
 def login_page():
@@ -204,6 +217,7 @@ def login_page():
     </body>
     </html>
     """
+
 
 @app.route("/login", methods=["POST"])
 @limiter.limit("5 per minute")
@@ -233,10 +247,10 @@ def login():
             )
 
         log.info("login_success",
-            username=username,
-            ip=request.remote_addr,
-            remember_me=remember_me
-        )
+                 username=username,
+                 ip=request.remote_addr,
+                 remember_me=remember_me
+                 )
 
         if remember_me:
             session.permanent = True
@@ -246,18 +260,22 @@ def login():
         return redirect(url_for("dashboard"))
 
     log.warning("login_failed",
-        username=username,
-        ip=request.remote_addr,
-        user_agent=request.headers.get("User-Agent", "unknown")
-    )
+                username=username,
+                ip=request.remote_addr,
+                user_agent=request.headers.get("User-Agent", "unknown")
+                )
+    alert_failed_login(username, request.remote_addr, 1)
     return {"error": "Invalid username or password"}, 401
+
 
 @app.errorhandler(RateLimitExceeded)
 def handle_rate_limit(e):
+    alert_rate_limit_hit(request.remote_addr, request.path)
     return {
         "error": "Too many requests. Please slow down and try again later.",
         "retry_after": str(e.description)
     }, 429
+
 
 @app.route("/dashboard")
 def dashboard():
@@ -276,17 +294,19 @@ def dashboard():
         <p>Session type: {session_type}</p>
         <p>Last active: {last_active}</p>
         <p><a href="/change-password">Change password</a></p>
-	<p><a href="/delete-account-page">Delete account</a></p>
-	<p><a href="/api/profile">View profile (JSON)</a></p>
+        <p><a href="/delete-account-page">Delete account</a></p>
+        <p><a href="/api/profile">View profile (JSON)</a></p>
         <a href="/logout">Log out</a>
     </body>
     </html>
     """
 
+
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect(url_for("login_page"))
+
 
 @app.route("/change-password", methods=["GET"])
 def change_password_page():
@@ -312,6 +332,7 @@ def change_password_page():
     </body>
     </html>
     """
+
 
 @app.route("/change-password", methods=["POST"])
 @limiter.limit("5 per hour")
@@ -343,7 +364,8 @@ def change_password():
             (session["user_id"],)
         ).fetchone()
 
-    if not row or not bcrypt.checkpw(current_password.encode("utf-8"), row["password_hash"]):
+    if not row or not bcrypt.checkpw(
+            current_password.encode("utf-8"), row["password_hash"]):
         return {"error": "Current password is incorrect"}, 401
 
     # Hash and save new password
@@ -356,13 +378,14 @@ def change_password():
         )
 
     log.info("password_changed",
-        user_id=session["user_id"],
-        ip=request.remote_addr
-    )
+             user_id=session["user_id"],
+             ip=request.remote_addr
+             )
 
     # Clear session — force re-login with new password
     session.clear()
     return redirect(url_for("login_page"))
+
 
 @app.route("/api/profile", methods=["GET"])
 @csrf.exempt
@@ -394,6 +417,7 @@ def api_profile():
         "last_login": row["last_login"]
     }, 200
 
+
 @app.route("/api/profile", methods=["PUT"])
 @csrf.exempt
 @limiter.limit("10 per hour")
@@ -423,6 +447,7 @@ def api_update_profile():
 
     return {"message": "Profile updated successfully"}, 200
 
+
 @app.route("/delete-account-page")
 def delete_account_page():
     if "user_id" not in session:
@@ -447,6 +472,7 @@ def delete_account_page():
     </html>
     """
 
+
 @app.route("/delete-account", methods=["POST"])
 @limiter.limit("3 per hour")
 def delete_account():
@@ -464,19 +490,22 @@ def delete_account():
             (session["user_id"],)
         ).fetchone()
 
-    if not row or not bcrypt.checkpw(password.encode("utf-8"), row["password_hash"]):
+    if not row or not bcrypt.checkpw(
+            password.encode("utf-8"), row["password_hash"]):
         return {"error": "Incorrect password"}, 401
 
     with get_db() as conn:
         conn.execute("DELETE FROM users WHERE id = ?", (session["user_id"],))
 
     log.info("account_deleted",
-        user_id=session["user_id"],
-        ip=request.remote_addr
-    )
+             user_id=session["user_id"],
+             ip=request.remote_addr
+             )
+    alert_account_deleted(session["user_id"], request.remote_addr)
 
     session.clear()
     return {"message": "Account deleted successfully"}, 200
+
 
 @app.route("/api/stats")
 @csrf.exempt
@@ -485,9 +514,11 @@ def api_stats():
         count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     return {"total_users": count}, 200
 
+
 def hash_api_key(key):
     """Hash an API key for storage."""
     return hashlib.sha256(key.encode()).hexdigest()
+
 
 def get_api_key_user(request):
     """Extract and validate API key from request headers."""
@@ -511,6 +542,7 @@ def get_api_key_user(request):
             )
     return row
 
+
 @app.route("/api/keys", methods=["GET"])
 @csrf.exempt
 def list_api_keys():
@@ -532,6 +564,7 @@ def list_api_keys():
             for row in keys
         ]
     }, 200
+
 
 @app.route("/api/keys", methods=["POST"])
 @csrf.exempt
@@ -562,10 +595,10 @@ def create_api_key():
                 (session["user_id"], key_hash, name)
             )
         log.info("api_key_created",
-            user_id=session["user_id"],
-            key_name=name,
-            ip=request.remote_addr
-        )
+                 user_id=session["user_id"],
+                 key_name=name,
+                 ip=request.remote_addr
+                 )
         return {
             "message": "API key created successfully",
             "key": raw_key,
@@ -574,6 +607,7 @@ def create_api_key():
         }, 201
     except Exception as e:
         return {"error": "Failed to create API key"}, 500
+
 
 @app.route("/api/keys/<int:key_id>", methods=["DELETE"])
 @csrf.exempt
@@ -597,26 +631,38 @@ def delete_api_key(key_id):
         conn.execute("DELETE FROM api_keys WHERE id = ?", (key_id,))
 
     log.info("api_key_deleted",
-        user_id=session["user_id"],
-        key_id=key_id,
-        ip=request.remote_addr
-    )
+             user_id=session["user_id"],
+             key_id=key_id,
+             ip=request.remote_addr
+             )
     return {"message": "API key deleted"}, 200
+
 
 @app.route("/api/docs")
 @csrf.exempt
 def api_docs():
     accept = request.headers.get("Accept", "")
-    
+
     endpoints = [
-        {"method": "GET", "path": "/health", "auth": "None", "description": "Health check", "rate_limit": "—"},
-        {"method": "GET", "path": "/api/docs", "auth": "None", "description": "This documentation", "rate_limit": "—"},
-        {"method": "GET", "path": "/api/stats", "auth": "None", "description": "Total user count", "rate_limit": "—"},
-        {"method": "GET", "path": "/api/profile", "auth": "Session or API key", "description": "Get your profile", "rate_limit": "—"},
-        {"method": "PUT", "path": "/api/profile", "auth": "Session or API key", "description": "Update your profile", "rate_limit": "10/hour"},
-        {"method": "GET", "path": "/api/keys", "auth": "Session", "description": "List your API keys", "rate_limit": "—"},
-        {"method": "POST", "path": "/api/keys", "auth": "Session", "description": "Create an API key", "rate_limit": "10/hour"},
-        {"method": "DELETE", "path": "/api/keys/<id>", "auth": "Session", "description": "Delete an API key", "rate_limit": "—"},
+        {"method": "GET", "path": "/health", "auth": "None",
+            "description": "Health check", "rate_limit": "—"},
+        {"method": "GET", "path": "/api/docs", "auth": "None",
+            "description": "This documentation", "rate_limit": "—"},
+        {"method": "GET", "path": "/api/stats", "auth": "None",
+            "description": "Total user count", "rate_limit": "—"},
+        {"method": "GET",
+         "path": "/api/profile",
+         "auth": "Session or API key",
+         "description": "Get your profile",
+         "rate_limit": "—"},
+        {"method": "PUT", "path": "/api/profile", "auth": "Session or API key",
+            "description": "Update your profile", "rate_limit": "10/hour"},
+        {"method": "GET", "path": "/api/keys", "auth": "Session",
+            "description": "List your API keys", "rate_limit": "—"},
+        {"method": "POST", "path": "/api/keys", "auth": "Session",
+            "description": "Create an API key", "rate_limit": "10/hour"},
+        {"method": "DELETE", "path": "/api/keys/<id>", "auth": "Session",
+            "description": "Delete an API key", "rate_limit": "—"},
     ]
 
     if "application/json" in accept or "json" in accept:
@@ -691,6 +737,7 @@ def api_docs():
     </body>
     </html>
     """, 200
+
 
 init_db()
 
