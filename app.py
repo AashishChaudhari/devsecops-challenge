@@ -603,6 +603,95 @@ def delete_api_key(key_id):
     )
     return {"message": "API key deleted"}, 200
 
+@app.route("/api/docs")
+@csrf.exempt
+def api_docs():
+    accept = request.headers.get("Accept", "")
+    
+    endpoints = [
+        {"method": "GET", "path": "/health", "auth": "None", "description": "Health check", "rate_limit": "—"},
+        {"method": "GET", "path": "/api/docs", "auth": "None", "description": "This documentation", "rate_limit": "—"},
+        {"method": "GET", "path": "/api/stats", "auth": "None", "description": "Total user count", "rate_limit": "—"},
+        {"method": "GET", "path": "/api/profile", "auth": "Session or API key", "description": "Get your profile", "rate_limit": "—"},
+        {"method": "PUT", "path": "/api/profile", "auth": "Session or API key", "description": "Update your profile", "rate_limit": "10/hour"},
+        {"method": "GET", "path": "/api/keys", "auth": "Session", "description": "List your API keys", "rate_limit": "—"},
+        {"method": "POST", "path": "/api/keys", "auth": "Session", "description": "Create an API key", "rate_limit": "10/hour"},
+        {"method": "DELETE", "path": "/api/keys/<id>", "auth": "Session", "description": "Delete an API key", "rate_limit": "—"},
+    ]
+
+    if "application/json" in accept or "json" in accept:
+        return {
+            "title": "DevSecOps Challenge API",
+            "version": "1.0.0",
+            "authentication": {
+                "session": "Login via /login-page",
+                "api_key": "Authorization: Bearer dso_YOUR_KEY"
+            },
+            "endpoints": endpoints
+        }, 200
+
+    rows = ""
+    for ep in endpoints:
+        method_color = {
+            "GET": "#61affe",
+            "POST": "#49cc90",
+            "PUT": "#fca130",
+            "DELETE": "#f93e3e"
+        }.get(ep["method"], "#ccc")
+
+        rows += f"""
+        <tr>
+            <td><span style="background:{method_color};color:white;padding:3px 8px;border-radius:4px;font-weight:bold;font-size:12px">{ep['method']}</span></td>
+            <td><code>{ep['path']}</code></td>
+            <td>{ep['auth']}</td>
+            <td>{ep['description']}</td>
+            <td>{ep['rate_limit']}</td>
+        </tr>"""
+
+    return f"""
+    <html>
+    <head>
+        <title>API Documentation</title>
+        <style>
+            body {{ font-family: sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; color: #333; }}
+            h1 {{ color: #2d2d2d; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            th {{ background: #f5f5f5; padding: 10px; text-align: left; border-bottom: 2px solid #ddd; }}
+            td {{ padding: 10px; border-bottom: 1px solid #eee; vertical-align: middle; }}
+            code {{ background: #f5f5f5; padding: 2px 6px; border-radius: 4px; font-size: 13px; }}
+            .auth-box {{ background: #f9f9f9; border-left: 4px solid #61affe; padding: 16px; margin: 20px 0; border-radius: 4px; }}
+        </style>
+    </head>
+    <body>
+        <h1>DevSecOps Challenge API <small style="font-size:14px;color:#999">v1.0.0</small></h1>
+        <p>Base URL: <code>{request.host_url.rstrip('/')}</code></p>
+
+        <div class="auth-box">
+            <strong>Authentication:</strong><br>
+            Session: Login via <code>/login-page</code><br>
+            API Key: <code>Authorization: Bearer dso_YOUR_KEY</code>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Endpoint</th>
+                    <th>Auth</th>
+                    <th>Description</th>
+                    <th>Rate limit</th>
+                </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+        </table>
+
+        <p style="margin-top:40px;color:#999;font-size:13px">
+            Built as part of <a href="https://twitter.com/hashtag/60DaysOfLearning2026">#60DaysOfLearning2026</a>
+        </p>
+    </body>
+    </html>
+    """, 200
+
 init_db()
 
 if __name__ == "__main__":
