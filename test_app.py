@@ -443,3 +443,17 @@ def test_api_key_requires_login_to_create(client):
         content_type="application/json"
     )
     assert response.status_code == 401
+
+def test_api_docs_returns_200(client):
+    response = client.get("/api/docs")
+    assert response.status_code == 200
+
+def test_api_docs_json(client):
+    response = client.get("/api/docs",
+        headers={"Accept": "application/json"}
+    )
+    assert response.status_code == 200
+    data = response.get_json()
+    assert "endpoints" in data
+    assert "authentication" in data
+
