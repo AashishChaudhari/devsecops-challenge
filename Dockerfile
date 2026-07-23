@@ -21,6 +21,7 @@ COPY logger.py .
 COPY gunicorn.conf.py .
 COPY config.py .
 COPY notifications.py .
+COPY middleware.py .
 
 RUN useradd --create-home --shell /bin/bash appuser
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*

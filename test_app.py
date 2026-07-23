@@ -457,3 +457,18 @@ def test_api_docs_json(client):
     assert "endpoints" in data
     assert "authentication" in data
 
+def test_security_headers_on_all_routes(client):
+    routes = ["/", "/health", "/register", "/login-page", "/api/stats"]
+    for route in routes:
+        response = client.get(route)
+        assert response.headers.get("X-Content-Type-Options") == "nosniff", f"Missing header on {route}"
+        assert response.headers.get("X-Frame-Options") == "DENY", f"Missing header on {route}"
+        assert response.headers.get("Cache-Control") == "no-store", f"Missing header on {route}"
+
+def test_security_headers_on_error_pages(client):
+    response = client.get("/nonexistent-route-404")
+    assert response.headers.get("X-Content-Type-Options") == "nosniff"
+
+def test_referrer_policy_header(client):
+    response = client.get("/")
+    assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"

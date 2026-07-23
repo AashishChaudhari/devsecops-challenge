@@ -1,3 +1,4 @@
+from middleware import SecurityHeadersMiddleware
 from datetime import datetime, timezone
 from werkzeug.middleware.proxy_fix import ProxyFix
 from database import init_db, get_db
@@ -27,6 +28,7 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
 setup_logging()
 log = get_logger(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+app.wsgi_app = SecurityHeadersMiddleware(app.wsgi_app)
 csrf = CSRFProtect(app)
 limiter = Limiter(
     get_remote_address,
@@ -34,19 +36,6 @@ limiter = Limiter(
     default_limits=["200 per day", "50 per hour"],
     storage_uri="memory://"
 )
-
-
-def add_security_headers(response):
-    response.headers['X-Content-Type-Options'] = 'nosniff'
-    response.headers['X-Frame-Options'] = 'DENY'
-    response.headers['Content-Security-Policy'] = "default-src 'self'; form-action 'self'; frame-ancestors 'none'"
-    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=()'
-    response.headers['Cross-Origin-Embedder-Policy'] = 'require-corp'
-    response.headers['Cross-Origin-Opener-Policy'] = 'same-origin'
-    response.headers['Cross-Origin-Resource-Policy'] = 'same-origin'
-    response.headers['Cache-Control'] = 'no-store'
-    response.headers['Server'] = 'webserver'
-    return response
 
 
 @app.before_request
@@ -66,15 +55,15 @@ def check_session_expiry():
 
 
 @app.after_request
-def apply_security_headers(response):
+def log_request(response):
     if request.path != "/health":
         log.info("request",
-                 method=request.method,
-                 path=request.path,
-                 status=response.status_code,
-                 ip=request.remote_addr
-                 )
-    return add_security_headers(response)
+            method=request.method,
+            path=request.path,
+            status=response.status_code,
+            ip=request.remote_addr
+        )
+    return response
 
 
 @app.route("/")
