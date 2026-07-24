@@ -41,21 +41,21 @@ def test_database_initializes():
 def test_register_success(client):
     response = client.post("/register", data={
         "username": "newuser",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     assert response.status_code == 201
 
 def test_register_duplicate_username(client):
     client.post("/register", data={
         "username": "dupuser",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     response = client.post("/register", data={
         "username": "dupuser",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     assert response.status_code == 409
 
@@ -70,7 +70,7 @@ def test_register_short_password(client):
 def test_register_password_mismatch(client):
     response = client.post("/register", data={
         "username": "mismatch",
-        "password": "securepass123",
+        "password": "SecurePass1!",
         "confirm_password": "differentpass"
     })
     assert response.status_code == 400
@@ -79,21 +79,21 @@ def test_login_success(client):
     # Register first
     client.post("/register", data={
         "username": "loginuser",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     # Then login
     response = client.post("/login", data={
         "username": "loginuser",
-        "password": "securepass123"
+        "password": "SecurePass1!"
     })
     assert response.status_code == 302  # redirect to dashboard
 
 def test_login_wrong_password(client):
     client.post("/register", data={
         "username": "loginuser2",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     response = client.post("/login", data={
         "username": "loginuser2",
@@ -108,12 +108,12 @@ def test_dashboard_requires_login(client):
 def test_logout_clears_session(client):
     client.post("/register", data={
         "username": "logoutuser",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     client.post("/login", data={
         "username": "logoutuser",
-        "password": "securepass123"
+        "password": "SecurePass1!"
     })
     client.get("/logout")
     response = client.get("/dashboard")
@@ -122,12 +122,12 @@ def test_logout_clears_session(client):
 def test_login_with_remember_me(client):
     client.post("/register", data={
         "username": "rememberuser",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     response = client.post("/login", data={
         "username": "rememberuser",
-        "password": "securepass123",
+        "password": "SecurePass1!",
         "remember_me": "1"
     })
     assert response.status_code == 302
@@ -135,12 +135,12 @@ def test_login_with_remember_me(client):
 def test_login_without_remember_me(client):
     client.post("/register", data={
         "username": "norememberuser",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     response = client.post("/login", data={
         "username": "norememberuser",
-        "password": "securepass123"
+        "password": "SecurePass1!"
     })
     assert response.status_code == 302
 
@@ -153,8 +153,8 @@ def test_rate_limit_login(client):
     # Register a user first
     client.post("/register", data={
         "username": "ratelimituser",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     # Rate limiting is disabled in tests so this just confirms login still works
     response = client.post("/login", data={
@@ -166,17 +166,17 @@ def test_rate_limit_login(client):
 def test_change_password_success(client):
     client.post("/register", data={
         "username": "changeuser",
-        "password": "oldpassword123",
-        "confirm_password": "oldpassword123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     client.post("/login", data={
         "username": "changeuser",
-        "password": "oldpassword123"
+        "password": "SecurePass1!"
     })
     response = client.post("/change-password", data={
-        "current_password": "oldpassword123",
-        "new_password": "newpassword456",
-        "confirm_password": "newpassword456"
+        "current_password": "SecurePass1!",
+        "new_password": "NewSecurePass2@",
+        "confirm_password": "NewSecurePass2@"
     })
     assert response.status_code == 302
 
@@ -208,17 +208,17 @@ def test_change_password_requires_login(client):
 def test_change_password_same_as_old(client):
     client.post("/register", data={
         "username": "changeuser3",
-        "password": "oldpassword123",
-        "confirm_password": "oldpassword123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     client.post("/login", data={
         "username": "changeuser3",
-        "password": "oldpassword123"
+        "password": "SecurePass1!"
     })
     response = client.post("/change-password", data={
-        "current_password": "oldpassword123",
-        "new_password": "oldpassword123",
-        "confirm_password": "oldpassword123"
+        "current_password": "SecurePass1!",
+        "new_password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     assert response.status_code == 400
 
@@ -229,12 +229,12 @@ def test_api_profile_requires_auth(client):
 def test_api_profile_returns_user_data(client):
     client.post("/register", data={
         "username": "profileuser",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     client.post("/login", data={
         "username": "profileuser",
-        "password": "securepass123"
+        "password": "SecurePass1!"
     })
     response = client.get("/api/profile")
     assert response.status_code == 200
@@ -245,12 +245,12 @@ def test_api_profile_returns_user_data(client):
 def test_api_profile_update(client):
     client.post("/register", data={
         "username": "profileuser2",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     client.post("/login", data={
         "username": "profileuser2",
-        "password": "securepass123"
+        "password": "SecurePass1!"
     })
     response = client.put("/api/profile",
         json={"email": "test@example.com", "bio": "Hello world"},
@@ -261,12 +261,12 @@ def test_api_profile_update(client):
 def test_api_profile_invalid_email(client):
     client.post("/register", data={
         "username": "profileuser3",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     client.post("/login", data={
         "username": "profileuser3",
-        "password": "securepass123"
+        "password": "SecurePass1!"
     })
     response = client.put("/api/profile",
         json={"email": "notanemail", "bio": "test"},
@@ -277,12 +277,12 @@ def test_api_profile_invalid_email(client):
 def test_api_profile_bio_too_long(client):
     client.post("/register", data={
         "username": "profileuser4",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     client.post("/login", data={
         "username": "profileuser4",
-        "password": "securepass123"
+        "password": "SecurePass1!"
     })
     response = client.put("/api/profile",
         json={"email": "test@example.com", "bio": "x" * 201},
@@ -303,8 +303,8 @@ def test_health_endpoint(client):
 def test_username_invalid_characters(client):
     response = client.post("/register", data={
         "username": "bad user!",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     assert response.status_code == 400
 
@@ -312,24 +312,24 @@ def test_username_valid_formats(client):
     for username in ["valid_user", "valid.user", "valid-user", "ValidUser123"]:
         response = client.post("/register", data={
             "username": username,
-            "password": "securepass123",
-            "confirm_password": "securepass123"
+            "password": "SecurePass1!",
+            "confirm_password": "SecurePass1!"
         })
         assert response.status_code == 201
 
 def test_delete_account_requires_login(client):
-    response = client.post("/delete-account", data={"password": "securepass123"})
+    response = client.post("/delete-account", data={"password": "SecurePass1!"})
     assert response.status_code == 401
 
 def test_delete_account_wrong_password(client):
     client.post("/register", data={
         "username": "deleteuser",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     client.post("/login", data={
         "username": "deleteuser",
-        "password": "securepass123"
+        "password": "SecurePass1!"
     })
     response = client.post("/delete-account", data={"password": "wrongpassword"})
     assert response.status_code == 401
@@ -337,14 +337,14 @@ def test_delete_account_wrong_password(client):
 def test_delete_account_success(client):
     client.post("/register", data={
         "username": "deleteuser2",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     client.post("/login", data={
         "username": "deleteuser2",
-        "password": "securepass123"
+        "password": "SecurePass1!"
     })
-    response = client.post("/delete-account", data={"password": "securepass123"})
+    response = client.post("/delete-account", data={"password": "SecurePass1!"})
     assert response.status_code == 200
 
 def test_api_stats(client):
@@ -361,8 +361,8 @@ def test_logging_does_not_break_requests(client):
 def test_failed_login_still_returns_401(client):
     client.post("/register", data={
         "username": "logtest",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     response = client.post("/login", data={
         "username": "logtest",
@@ -390,12 +390,12 @@ def test_development_config_is_not_testing():
 def test_create_api_key(client):
     client.post("/register", data={
         "username": "apiuser",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     client.post("/login", data={
         "username": "apiuser",
-        "password": "securepass123"
+        "password": "SecurePass1!"
     })
     response = client.post("/api/keys",
         json={"name": "test-key"},
@@ -409,12 +409,12 @@ def test_create_api_key(client):
 def test_api_key_authentication(client):
     client.post("/register", data={
         "username": "apikeyuser",
-        "password": "securepass123",
-        "confirm_password": "securepass123"
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
     })
     client.post("/login", data={
         "username": "apikeyuser",
-        "password": "securepass123"
+        "password": "SecurePass1!"
     })
     # Create API key
     r = client.post("/api/keys",
@@ -472,3 +472,52 @@ def test_security_headers_on_error_pages(client):
 def test_referrer_policy_header(client):
     response = client.get("/")
     assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+
+def test_weak_password_rejected(client):
+    response = client.post("/register", data={
+        "username": "weakpassuser",
+        "password": "password",
+        "confirm_password": "password"
+    })
+    assert response.status_code == 400
+
+def test_strong_password_accepted(client):
+    response = client.post("/register", data={
+        "username": "strongpassuser",
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
+    })
+    assert response.status_code == 201
+
+def test_activity_log_requires_auth(client):
+    response = client.get("/api/activity")
+    assert response.status_code == 401
+
+def test_activity_log_records_login(client):
+    client.post("/register", data={
+        "username": "activityuser",
+        "password": "SecurePass1!",
+        "confirm_password": "SecurePass1!"
+    })
+    client.post("/login", data={
+        "username": "activityuser",
+        "password": "SecurePass1!"
+    })
+    response = client.get("/api/activity")
+    assert response.status_code == 200
+    data = response.get_json()
+    assert len(data["activity"]) > 0
+    events = [a["event"] for a in data["activity"]]
+    assert "login_success" in events
+
+def test_password_validator():
+    from password_validator import validate_password_strength
+    valid, errors = validate_password_strength("SecurePass1!")
+    assert valid is True
+    assert len(errors) == 0
+
+def test_password_validator_weak():
+    from password_validator import validate_password_strength
+    valid, errors = validate_password_strength("password")
+    assert valid is False
+    assert len(errors) > 0
