@@ -1,3 +1,4 @@
+from password_validator import validate_password_strength
 from middleware import SecurityHeadersMiddleware
 from datetime import datetime, timezone
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -27,6 +28,19 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(
     days=app.config["PERMANENT_SESSION_LIFETIME_DAYS"])
 setup_logging()
 log = get_logger(__name__)
+
+
+def log_activity(user_id, event, ip=None, user_agent=None):
+    """Log user activity to the database."""
+    try:
+        with get_db() as conn:
+            conn.execute(
+                """INSERT INTO activity_log (user_id, event, ip_address, user_agent)
+                   VALUES (?, ?, ?, ?)""", (user_id, event, ip, user_agent))
+    except Exception as e:
+        log.error("activity_log_failed", error=str(e))
+
+
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 app.wsgi_app = SecurityHeadersMiddleware(app.wsgi_app)
 csrf = CSRFProtect(app)
@@ -58,11 +72,11 @@ def check_session_expiry():
 def log_request(response):
     if request.path != "/health":
         log.info("request",
-            method=request.method,
-            path=request.path,
-            status=response.status_code,
-            ip=request.remote_addr
-        )
+                 method=request.method,
+                 path=request.path,
+                 status=response.status_code,
+                 ip=request.remote_addr
+                 )
     return response
 
 
@@ -132,13 +146,14 @@ def register():
         return {
             "error": "Username can only contain letters, numbers, underscores, dots and hyphens"}, 400
 
-    if len(password) < 8:
+    is_valid, errors = validate_password_strength(password)
+    if not is_valid:
         log.warning("registration_failed",
-                    reason="password_too_short",
+                    reason="weak_password",
                     username=username,
                     ip=request.remote_addr
                     )
-        return {"error": "Password must be at least 8 characters"}, 400
+        return {"error": errors[0], "all_errors": errors}, 400
 
     if password != confirm_password:
         log.warning("registration_failed",
@@ -162,7 +177,8 @@ def register():
                  )
         alert_new_registration(username, request.remote_addr)
         return {
-            "message": f"Account created successfully! Welcome, {escape(username)}"}, 201
+            "message": f"Account created successfully! Welcome, {
+                escape(username)}"}, 201
 
     except Exception as e:
         if "UNIQUE constraint failed" in str(e):
@@ -240,6 +256,12 @@ def login():
                  ip=request.remote_addr,
                  remember_me=remember_me
                  )
+        log_activity(
+            row["id"],
+            "login_success",
+            ip=request.remote_addr,
+            user_agent=request.headers.get("User-Agent", "")
+        )
 
         if remember_me:
             session.permanent = True
@@ -254,6 +276,15 @@ def login():
                 user_agent=request.headers.get("User-Agent", "unknown")
                 )
     alert_failed_login(username, request.remote_addr, 1)
+    with get_db() as conn:
+        failed_row = conn.execute(
+            "SELECT id FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        if failed_row:
+            log_activity(
+                failed_row["id"],
+                "login_failed",
+                ip=request.remote_addr)
     return {"error": "Invalid username or password"}, 401
 
 
@@ -333,12 +364,12 @@ def change_password():
     new_password = request.form.get("new_password", "")
     confirm_password = request.form.get("confirm_password", "")
 
-    # Validation
     if not current_password or not new_password:
         return {"error": "All fields are required"}, 400
 
-    if len(new_password) < 8:
-        return {"error": "New password must be at least 8 characters"}, 400
+    is_valid, errors = validate_password_strength(new_password)
+    if not is_valid:
+        return {"error": errors[0], "all_errors": errors}, 400
 
     if new_password != confirm_password:
         return {"error": "New passwords do not match"}, 400
@@ -346,7 +377,6 @@ def change_password():
     if current_password == new_password:
         return {"error": "New password must be different from current password"}, 400
 
-    # Verify current password
     with get_db() as conn:
         row = conn.execute(
             "SELECT password_hash FROM users WHERE id = ?",
@@ -357,9 +387,7 @@ def change_password():
             current_password.encode("utf-8"), row["password_hash"]):
         return {"error": "Current password is incorrect"}, 401
 
-    # Hash and save new password
     new_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt())
-
     with get_db() as conn:
         conn.execute(
             "UPDATE users SET password_hash = ? WHERE id = ?",
@@ -370,8 +398,11 @@ def change_password():
              user_id=session["user_id"],
              ip=request.remote_addr
              )
-
-    # Clear session — force re-login with new password
+    log_activity(
+        session["user_id"],
+        "password_changed",
+        ip=request.remote_addr
+    )
     session.clear()
     return redirect(url_for("login_page"))
 
@@ -492,6 +523,11 @@ def delete_account():
              )
     alert_account_deleted(session["user_id"], request.remote_addr)
 
+    log_activity(
+        session["user_id"],
+        "password_changed",
+        ip=request.remote_addr
+    )
     session.clear()
     return {"message": "Account deleted successfully"}, 200
 
@@ -726,6 +762,40 @@ def api_docs():
     </body>
     </html>
     """, 200
+
+
+@app.route("/api/activity")
+@csrf.exempt
+def api_activity():
+    user_row = get_api_key_user(request)
+    if user_row:
+        user_id = user_row["id"]
+    elif "user_id" in session:
+        user_id = session["user_id"]
+    else:
+        return {"error": "Authentication required"}, 401
+
+    with get_db() as conn:
+        events = conn.execute(
+            """SELECT event, ip_address, user_agent, created_at
+               FROM activity_log
+               WHERE user_id = ?
+               ORDER BY created_at DESC
+               LIMIT 50""",
+            (user_id,)
+        ).fetchall()
+
+    return {
+        "activity": [
+            {
+                "event": row["event"],
+                "ip_address": row["ip_address"],
+                "user_agent": row["user_agent"],
+                "created_at": row["created_at"]
+            }
+            for row in events
+        ]
+    }, 200
 
 
 init_db()
